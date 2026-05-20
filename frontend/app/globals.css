@@ -1,0 +1,114 @@
+@import url('https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=Vazirmatn:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --golden-50: #fffdf0;
+  --golden-100: #fef9c3;
+  --golden-200: #fef08a;
+  --golden-300: #fde047;
+  --golden-400: #facc15;
+  --golden-500: #eab308;
+  --golden-600: #ca8a04;
+  --golden-700: #a16207;
+  --golden-800: #854d0e;
+  --golden-900: #713f12;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  direction: rtl;
+  font-family: 'Amiri', 'Scheherazade New', 'Noto Naskh Arabic', 'Noto Sans Arabic', 'Vazirmatn', serif;
+  background: #fafaf5;
+  color: #1a1a0e;
+}
+
+.font-farsi { font-family: 'Amiri', 'Vazirmatn', serif; }
+
+/* Golden theme classes */
+.bg-golden { background: linear-gradient(135deg, #f59e0b, #d97706); }
+.text-golden { color: #b45309; }
+.border-golden { border-color: #f59e0b; }
+
+/* Sidebar */
+.sidebar {
+  background: linear-gradient(180deg, #1a1400 0%, #2d2100 50%, #1a1400 100%);
+  border-right: 3px solid #f59e0b;
+}
+
+/* Cards */
+.card-golden {
+  background: linear-gradient(135deg, #fffdf0 0%, #fef9c3 100%);
+  border: 1px solid #fde047;
+  box-shadow: 0 2px 12px rgba(234, 179, 8, 0.15);
+}
+
+/* Tables */
+.table-golden th {
+  background: linear-gradient(135deg, #92400e, #b45309);
+  color: white;
+}
+
+.table-golden tr:hover { background: #fef9c3; }
+
+/* Buttons */
+.btn-primary {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: white;
+  transition: all 0.2s;
+}
+.btn-primary:hover { background: linear-gradient(135deg, #d97706, #b45309); transform: translateY(-1px); }
+
+.btn-secondary {
+  background: white;
+  border: 2px solid #f59e0b;
+  color: #92400e;
+}
+.btn-secondary:hover { background: #fef9c3; }
+
+/* Status badges */
+.badge-active { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
+.badge-completed { background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
+.badge-cancelled { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+.badge-overdue { background: #fce7f3; color: #9d174d; border: 1px solid #f9a8d4; }
+
+/* Step indicator */
+.step-active { background: linear-gradient(135deg, #f59e0b, #d97706); color: white; }
+.step-completed { background: #065f46; color: white; }
+.step-inactive { background: #e5e7eb; color: #6b7280; }
+
+/* Form inputs */
+.input-golden {
+  border: 1.5px solid #fde047;
+  background: white;
+  transition: all 0.2s;
+}
+.input-golden:focus {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
+  outline: none;
+}
+
+/* Animations */
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.fade-in { animation: fadeIn 0.3s ease-out; }
+
+@keyframes slideIn { from { transform: translateX(20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+.slide-in { animation: slideIn 0.3s ease-out; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #fef9c3; }
+::-webkit-scrollbar-thumb { background: #f59e0b; border-radius: 3px; }
+
+/* Spinner border utility */
+.border-3 { border-width: 3px; }
+
+/* Print */
+@media print {
+  .no-print { display: none !important; }
+  body { background: white; }
+}

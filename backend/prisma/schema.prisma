@@ -1,0 +1,159 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role     @default(ADMIN)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CarOwner {
+  id            String   @id @default(cuid())
+  fullName      String
+  fatherName    String
+  tazkiraNumber String?
+  photo         String?
+  phoneNumber   String
+  address       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  cars          Car[]
+}
+
+model Car {
+  id              String          @id @default(cuid())
+  carType         String
+  carName         String
+  model           String
+  color           String
+  plateNumber     String          @unique
+  engineNumber    String?
+  status          CarStatus       @default(AVAILABLE)
+  dailyRate       Float
+  notes           String?
+  ownerId         String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  owner           CarOwner?       @relation(fields: [ownerId], references: [id])
+  rentalContracts RentalContract[]
+  images          CarImage[]
+}
+
+model CarImage {
+  id        String   @id @default(cuid())
+  carId     String
+  url       String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  car       Car      @relation(fields: [carId], references: [id], onDelete: Cascade)
+}
+
+model Customer {
+  id               String          @id @default(cuid())
+  fullName         String
+  fatherName       String
+  grandfatherName  String?
+  tazkiraNumber    String?
+  province         String?
+  district         String?
+  village          String?
+  currentAddress   String?
+  permanentAddress String?
+  phoneNumber      String
+  occupation       String?
+  photo            String?
+  notes            String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  rentalContracts  RentalContract[]
+}
+
+model Guarantor {
+  id               String          @id @default(cuid())
+  fullName         String
+  fatherName       String
+  grandfatherName  String?
+  tazkiraNumber    String?
+  province         String?
+  district         String?
+  village          String?
+  currentAddress   String?
+  permanentAddress String?
+  phoneNumber      String
+  relationship     String?
+  photo            String?
+  notes            String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  rentalContracts  RentalContract[]
+}
+
+model RentalContract {
+  id                  String         @id @default(cuid())
+  contractNumber      String         @unique
+  carId               String
+  customerId          String
+  guarantorId         String?
+  startDate           DateTime
+  startTime           String
+  endDate             DateTime
+  endTime             String
+  rentPrice           Float
+  totalRent           Float
+  advancePayment      Float          @default(0)
+  remainingAmount     Float
+  status              ContractStatus @default(ACTIVE)
+  carStatus           String?
+  conditions          String?
+  customerSignature   String?
+  guarantorSignature  String?
+  managerSignature    String?
+  agreementConfirmed  Boolean        @default(false)
+  notes               String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  car                 Car            @relation(fields: [carId], references: [id])
+  customer            Customer       @relation(fields: [customerId], references: [id])
+  guarantor           Guarantor?     @relation(fields: [guarantorId], references: [id])
+  payments            Payment[]
+}
+
+model Payment {
+  id               String         @id @default(cuid())
+  contractId       String
+  amount           Float
+  paymentDate      DateTime       @default(now())
+  paymentMethod    String?
+  notes            String?
+  createdAt        DateTime       @default(now())
+  rentalContract   RentalContract @relation(fields: [contractId], references: [id])
+}
+
+enum Role {
+  ADMIN
+  STAFF
+}
+
+enum CarStatus {
+  AVAILABLE
+  RENTED
+  MAINTENANCE
+  INACTIVE
+}
+
+enum ContractStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  OVERDUE
+}

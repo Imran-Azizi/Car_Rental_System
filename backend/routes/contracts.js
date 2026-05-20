@@ -1,0 +1,13 @@
+import express from 'express';
+import { getContracts, getContractById, createContract, updateContract, markAsReturned, addPayment, deleteContract } from '../controllers/contractController.js';
+import { authenticate } from '../middleware/auth.js';
+const router = express.Router();
+router.use(authenticate);
+router.get('/', getContracts);
+router.get('/:id', getContractById);
+router.post('/', createContract);
+router.put('/:id', updateContract);
+router.patch('/:id/return', markAsReturned);
+router.post('/:id/payment', addPayment);
+router.delete('/:id', deleteContract);
+export default router;

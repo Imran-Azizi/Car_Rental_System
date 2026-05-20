@@ -1,0 +1,271 @@
+'use client';
+import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import MainLayout from '@/components/layout/MainLayout';
+import Modal from '@/components/ui/Modal';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import { useApp } from '@/lib/context';
+import { carOwnersAPI } from '@/lib/api';
+import { Plus, Search, Edit, Trash2, UserCheck, Camera, X, Car } from 'lucide-react';
+import toast from 'react-hot-toast';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:5000';
+
+const emptyForm = { fullName: '', fatherName: '', tazkiraNumber: '', phoneNumber: '', address: '' };
+
+export default function CarOwnersPage() {
+  const { t, token, lang } = useApp();
+  const router = useRouter();
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const [owners, setOwners] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editOwner, setEditOwner] = useState<any>(null);
+  const [form, setForm] = useState(emptyForm);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => { if (!token) router.push('/'); else fetchOwners(); }, [token]);
+  useEffect(() => { if (token) fetchOwners(); }, [search]);
+
+  const fetchOwners = async () => {
+    setLoading(true);
+    try {
+      const res = await carOwnersAPI.getAll({ search });
+      setOwners(res.data.data);
+    } catch { toast.error(t.error); }
+    finally { setLoading(false); }
+  };
+
+  const openAdd = () => {
+    setEditOwner(null);
+    setForm(emptyForm);
+    setPhotoFile(null);
+    setPhotoPreview(null);
+    setErrors({});
+    setModalOpen(true);
+  };
+
+  const openEdit = (owner: any) => {
+    setEditOwner(owner);
+    setForm({ fullName: owner.fullName, fatherName: owner.fatherName, tazkiraNumber: owner.tazkiraNumber || '', phoneNumber: owner.phoneNumber, address: owner.address || '' });
+    setPhotoFile(null);
+    setPhotoPreview(owner.photo ? `${API_URL}${owner.photo}` : null);
+    setErrors({});
+    setModalOpen(true);
+  };
+
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { toast.error('حجم عکس نباید از ۵ مگابایت بیشتر باشد'); return; }
+    setPhotoFile(file);
+    setPhotoPreview(URL.createObjectURL(file));
+  };
+
+  const validate = () => {
+    const errs: Record<string, string> = {};
+    if (!form.fullName.trim()) errs.fullName = 'اسم الزامی است';
+    if (!form.fatherName.trim()) errs.fatherName = 'ولد الزامی است';
+    if (!form.phoneNumber.trim()) errs.phoneNumber = 'شماره تماس الزامی است';
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
+  const handleSave = async () => {
+    if (!validate()) return;
+    setSaving(true);
+    try {
+      const fd = new FormData();
+      fd.append('fullName', form.fullName.trim());
+      fd.append('fatherName', form.fatherName.trim());
+      fd.append('tazkiraNumber', form.tazkiraNumber.trim());
+      fd.append('phoneNumber', form.phoneNumber.trim());
+      fd.append('address', form.address.trim());
+      if (photoFile) fd.append('photo', photoFile);
+
+      if (editOwner) await carOwnersAPI.update(editOwner.id, fd);
+      else await carOwnersAPI.create(fd);
+
+      toast.success(t.carOwnerSaved);
+      setModalOpen(false);
+      fetchOwners();
+    } catch (err: any) { toast.error(err.response?.data?.message || t.error); }
+    finally { setSaving(false); }
+  };
+
+  const handleDelete = async (id: string) => {
+    try { await carOwnersAPI.delete(id); toast.success('صاحب موتر حذف شد'); fetchOwners(); }
+    catch (err: any) { toast.error(err.response?.data?.message || t.error); }
+  };
+
+  const inputCls = (field: string) =>
+    `w-full px-3 py-2 rounded-lg input-golden text-sm ${errors[field] ? 'border-red-400 bg-red-50' : ''}`;
+  const labelCls = "block text-sm font-medium text-amber-800 mb-1";
+
+  return (
+    <MainLayout>
+      <div className="space-y-5">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg,#f59e0b,#d97706)' }}>
+              <UserCheck className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold text-amber-900">{t.carOwners}</h2>
+              <p className="text-sm text-amber-600">{owners.length} صاحب موتر</p>
+            </div>
+          </div>
+          <button onClick={openAdd} className="btn-primary flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium">
+            <Plus className="w-4 h-4" />{t.addCarOwner}
+          </button>
+        </div>
+
+        {/* Search */}
+        <div className="relative max-w-sm">
+          <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-500" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder={t.searchPlaceholder}
+            className="w-full pr-10 py-2 px-3 rounded-lg input-golden text-sm"
+          />
+        </div>
+
+        {/* Owners Table */}
+        <div className="card-golden rounded-2xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full table-golden min-w-[640px]">
+              <thead>
+                <tr>
+                  <th className="px-4 py-3 text-right text-sm">#</th>
+                  <th className="px-4 py-3 text-right text-sm">{t.photo}</th>
+                  <th className="px-4 py-3 text-right text-sm">{t.fullName}</th>
+                  <th className="px-4 py-3 text-right text-sm">{t.fatherName}</th>
+                  <th className="px-4 py-3 text-right text-sm">{t.tazkiraNumber}</th>
+                  <th className="px-4 py-3 text-right text-sm">{t.phone}</th>
+                  <th className="px-4 py-3 text-right text-sm">{t.address}</th>
+                  <th className="px-4 py-3 text-right text-sm">{t.carCount}</th>
+                  <th className="px-4 py-3 text-right text-sm">{t.actions}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan={9} className="px-4 py-12 text-center text-amber-500">{t.loading}</td></tr>
+                ) : owners.length === 0 ? (
+                  <tr><td colSpan={9} className="px-4 py-12 text-center text-amber-500">{t.noData}</td></tr>
+                ) : owners.map((owner, i) => (
+                  <tr key={owner.id} className="border-b border-amber-100 hover:bg-amber-50/40 transition-colors">
+                    <td className="px-4 py-3 text-sm text-amber-600">{i + 1}</td>
+                    <td className="px-4 py-3">
+                      {owner.photo ? (
+                        <img src={`${API_URL}${owner.photo}`} alt={owner.fullName} className="w-10 h-10 rounded-full object-cover border-2 border-amber-200" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ background: 'linear-gradient(135deg,#f59e0b,#d97706)' }}>
+                          <UserCheck className="w-5 h-5 text-white" />
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-sm font-medium text-amber-900">{owner.fullName}</td>
+                    <td className="px-4 py-3 text-sm text-amber-700">{owner.fatherName}</td>
+                    <td className="px-4 py-3 text-sm text-amber-700">{owner.tazkiraNumber || '—'}</td>
+                    <td className="px-4 py-3 text-sm text-amber-700" dir="ltr">{owner.phoneNumber}</td>
+                    <td className="px-4 py-3 text-sm text-amber-700 max-w-[160px] truncate">{owner.address || '—'}</td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-medium">
+                        <Car className="w-3 h-3" />{owner._count?.cars || 0}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => openEdit(owner)} className="p-1.5 rounded-lg text-amber-600 hover:bg-amber-100 transition-colors" title={t.edit}><Edit className="w-4 h-4" /></button>
+                        <button onClick={() => setDeleteId(owner.id)} className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition-colors" title={t.delete}><Trash2 className="w-4 h-4" /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* Add/Edit Modal */}
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editOwner ? t.editCarOwner : t.addCarOwner} size="lg">
+        <div className="space-y-5">
+          {/* Photo Upload */}
+          <div className="flex flex-col items-center gap-3">
+            <div className="relative">
+              {photoPreview ? (
+                <img src={photoPreview} alt="preview" className="w-24 h-24 rounded-full object-cover border-4 border-amber-200 shadow" />
+              ) : (
+                <div className="w-24 h-24 rounded-full flex items-center justify-center border-4 border-dashed border-amber-300" style={{ background: 'linear-gradient(135deg,#fef9c3,#fef3c7)' }}>
+                  <Camera className="w-8 h-8 text-amber-400" />
+                </div>
+              )}
+              {photoPreview && (
+                <button onClick={() => { setPhotoFile(null); setPhotoPreview(editOwner?.photo ? `${API_URL}${editOwner.photo}` : null); if (fileRef.current) fileRef.current.value = ''; }}
+                  className="absolute -top-1 -left-1 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center">
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+            <input ref={fileRef} type="file" accept="image/jpeg,image/jpg,image/png,image/webp" onChange={handlePhotoChange} className="hidden" />
+            <button type="button" onClick={() => fileRef.current?.click()}
+              className="flex items-center gap-2 px-4 py-1.5 rounded-lg border border-amber-300 text-amber-700 text-sm hover:bg-amber-50 transition-colors">
+              <Camera className="w-4 h-4" />
+              {photoPreview ? t.changePhoto : t.uploadPhoto}
+            </button>
+          </div>
+
+          {/* Form fields */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className={labelCls}>اسم *</label>
+              <input value={form.fullName} onChange={e => setForm({ ...form, fullName: e.target.value })} className={inputCls('fullName')} placeholder="نام کامل صاحب موتر" />
+              {errors.fullName && <p className="text-red-500 text-xs mt-1">{errors.fullName}</p>}
+            </div>
+            <div>
+              <label className={labelCls}>ولد *</label>
+              <input value={form.fatherName} onChange={e => setForm({ ...form, fatherName: e.target.value })} className={inputCls('fatherName')} placeholder="نام پدر" />
+              {errors.fatherName && <p className="text-red-500 text-xs mt-1">{errors.fatherName}</p>}
+            </div>
+            <div>
+              <label className={labelCls}>نمبر تذکره</label>
+              <input value={form.tazkiraNumber} onChange={e => setForm({ ...form, tazkiraNumber: e.target.value })} className={inputCls('tazkiraNumber')} placeholder="شماره تذکره ملی" />
+            </div>
+            <div>
+              <label className={labelCls}>شماره تماس *</label>
+              <input value={form.phoneNumber} onChange={e => setForm({ ...form, phoneNumber: e.target.value })} className={inputCls('phoneNumber')} placeholder="07X-XXXXXXX" dir="ltr" />
+              {errors.phoneNumber && <p className="text-red-500 text-xs mt-1">{errors.phoneNumber}</p>}
+            </div>
+            <div className="sm:col-span-2">
+              <label className={labelCls}>آدرس</label>
+              <textarea value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} rows={2} className={`${inputCls('address')} resize-none`} placeholder="آدرس کامل..." />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-3 mt-5">
+          <button onClick={() => setModalOpen(false)} className="flex-1 btn-secondary py-2.5 rounded-xl text-sm">{t.cancel}</button>
+          <button onClick={handleSave} disabled={saving} className="flex-1 btn-primary py-2.5 rounded-xl text-sm disabled:opacity-50">
+            {saving ? t.loading : t.save}
+          </button>
+        </div>
+      </Modal>
+
+      <ConfirmDialog
+        open={!!deleteId}
+        onClose={() => setDeleteId(null)}
+        onConfirm={() => handleDelete(deleteId!)}
+        message="آیا از حذف این صاحب موتر مطمئن هستید؟ این عملیات قابل بازگشت نیست."
+      />
+    </MainLayout>
+  );
+}

@@ -1,0 +1,18 @@
+# Global ignores
+*.log
+*.tmp
+*.swp
+*.swo
+*.bak
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.tgz
+*.pid
+# Ignore OS and editor files
+*.iml
+*.sublime*
+*.code-workspace
+# Ignore system files
+$RECYCLE.BIN/
