@@ -23,7 +23,31 @@ api.interceptors.response.use(
   }
 );
 
+// Separate Axios instance for owner portal (uses ownerToken)
+const ownerApi = axios.create({ baseURL: API_URL });
+
+ownerApi.interceptors.request.use((config) => {
+  if (typeof window !== 'undefined') {
+    const token = localStorage.getItem('ownerToken');
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+ownerApi.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401 && typeof window !== 'undefined') {
+      localStorage.removeItem('ownerToken');
+      localStorage.removeItem('ownerUser');
+      window.location.href = '/owner-login';
+    }
+    return Promise.reject(error);
+  }
+);
+
 export const authAPI = {
+  // Unified login — handles both Admin and Car Owner by email + password
   login: (data: { email: string; password: string }) => api.post('/auth/login', data),
   getMe: () => api.get('/auth/me'),
 };
@@ -89,6 +113,27 @@ export const carOwnersAPI = {
 
 export const dashboardAPI = {
   getStats: () => api.get('/dashboard/stats'),
+};
+
+export const expensesAPI = {
+  getStats: () => api.get('/expenses/stats'),
+  getAll: (params?: any) => api.get('/expenses', { params }),
+  getById: (id: string) => api.get(`/expenses/${id}`),
+  create: (data: any) => api.post('/expenses', data),
+  update: (id: string, data: any) => api.put(`/expenses/${id}`, data),
+  delete: (id: string) => api.delete(`/expenses/${id}`),
+};
+
+export const ownerAuthAPI = {
+  login: (data: { phoneNumber: string; password: string }) => api.post('/owner-auth/login', data),
+  getMe: () => ownerApi.get('/owner-auth/me'),
+};
+
+export const ownerPortalAPI = {
+  getDashboard: () => ownerApi.get('/owner-portal/dashboard'),
+  getCars: (params?: any) => ownerApi.get('/owner-portal/cars', { params }),
+  getContracts: (params?: any) => ownerApi.get('/owner-portal/contracts', { params }),
+  getProfile: () => ownerApi.get('/owner-portal/profile'),
 };
 
 export default api;

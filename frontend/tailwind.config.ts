@@ -24,7 +24,7 @@ const config: Config = {
         },
       },
       fontFamily: {
-        farsi: ['Amiri', 'Vazirmatn', 'serif'],
+        farsi: ['var(--font-amiri)', 'var(--font-vazirmatn)', 'Amiri', 'Vazirmatn', 'serif'],
       },
     },
   },

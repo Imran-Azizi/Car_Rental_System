@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import MainLayout from '@/components/layout/MainLayout';
 import Modal from '@/components/ui/Modal';
@@ -38,6 +38,8 @@ export default function ContractsPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [returnId, setReturnId] = useState<string | null>(null);
   const [printBill, setPrintBill] = useState<BillData | null>(null);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
 
   const buildBillData = (c: any): BillData => ({
     contractNumber:       c.contractNumber,
@@ -73,13 +75,23 @@ export default function ContractsPage() {
     notes:                c.notes,
   });
 
-  useEffect(() => { if (!token) router.push('/'); else fetchData(); }, [token]);
-  useEffect(() => { if (token) fetchData(); }, [search, statusFilter]);
+  // Debounce search input — avoids API call on every keystroke
+  useEffect(() => {
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => setDebouncedSearch(search), 400);
+    return () => { if (searchTimer.current) clearTimeout(searchTimer.current); };
+  }, [search]);
+
+  // Single combined effect — no double-fetch on mount
+  useEffect(() => {
+    if (!token) { router.push('/'); return; }
+    fetchData();
+  }, [token, debouncedSearch, statusFilter]);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const res = await contractsAPI.getAll({ search, status: statusFilter });
+      const res = await contractsAPI.getAll({ search: debouncedSearch, status: statusFilter });
       setContracts(res.data.data);
     } catch { toast.error(t.error); } finally { setLoading(false); }
   };

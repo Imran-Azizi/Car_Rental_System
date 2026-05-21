@@ -11,6 +11,9 @@ import guarantorRoutes from './routes/guarantors.js';
 import contractRoutes from './routes/contracts.js';
 import dashboardRoutes from './routes/dashboard.js';
 import carOwnerRoutes from './routes/carOwners.js';
+import ownerAuthRoutes from './routes/ownerAuth.js';
+import ownerPortalRoutes from './routes/ownerPortal.js';
+import expenseRoutes from './routes/expenses.js';
 
 dotenv.config();
 
@@ -32,6 +35,9 @@ app.use('/api/guarantors', guarantorRoutes);
 app.use('/api/contracts', contractRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/car-owners', carOwnerRoutes);
+app.use('/api/owner-auth', ownerAuthRoutes);
+app.use('/api/owner-portal', ownerPortalRoutes);
+app.use('/api/expenses', expenseRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: 'OK', message: 'سرور فعال است' }));
 app.use(errorHandler);

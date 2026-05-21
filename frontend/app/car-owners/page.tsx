@@ -6,12 +6,12 @@ import Modal from '@/components/ui/Modal';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { useApp } from '@/lib/context';
 import { carOwnersAPI } from '@/lib/api';
-import { Plus, Search, Edit, Trash2, UserCheck, Camera, X, Car } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, UserCheck, Camera, X, Car, Eye, EyeOff, KeyRound, Mail } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:5000';
 
-const emptyForm = { fullName: '', fatherName: '', tazkiraNumber: '', phoneNumber: '', address: '' };
+const emptyForm = { fullName: '', fatherName: '', tazkiraNumber: '', phoneNumber: '', address: '', email: '', password: '' };
 
 export default function CarOwnersPage() {
   const { t, token, lang } = useApp();
@@ -29,6 +29,7 @@ export default function CarOwnersPage() {
   const [saving, setSaving] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => { if (!token) router.push('/'); else fetchOwners(); }, [token]);
   useEffect(() => { if (token) fetchOwners(); }, [search]);
@@ -48,15 +49,17 @@ export default function CarOwnersPage() {
     setPhotoFile(null);
     setPhotoPreview(null);
     setErrors({});
+    setShowPassword(false);
     setModalOpen(true);
   };
 
   const openEdit = (owner: any) => {
     setEditOwner(owner);
-    setForm({ fullName: owner.fullName, fatherName: owner.fatherName, tazkiraNumber: owner.tazkiraNumber || '', phoneNumber: owner.phoneNumber, address: owner.address || '' });
+    setForm({ fullName: owner.fullName, fatherName: owner.fatherName, tazkiraNumber: owner.tazkiraNumber || '', phoneNumber: owner.phoneNumber, address: owner.address || '', email: owner.email || '', password: '' });
     setPhotoFile(null);
     setPhotoPreview(owner.photo ? `${API_URL}${owner.photo}` : null);
     setErrors({});
+    setShowPassword(false);
     setModalOpen(true);
   };
 
@@ -68,11 +71,15 @@ export default function CarOwnersPage() {
     setPhotoPreview(URL.createObjectURL(file));
   };
 
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
   const validate = () => {
     const errs: Record<string, string> = {};
     if (!form.fullName.trim()) errs.fullName = 'اسم الزامی است';
     if (!form.fatherName.trim()) errs.fatherName = 'ولد الزامی است';
     if (!form.phoneNumber.trim()) errs.phoneNumber = 'شماره تماس الزامی است';
+    if (form.email.trim() && !emailRegex.test(form.email.trim())) errs.email = 'فرمت ایمیل صحیح نیست';
+    if (form.password && form.password.length < 6) errs.password = 'رمز عبور باید حداقل ۶ کاراکتر باشد';
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -87,6 +94,8 @@ export default function CarOwnersPage() {
       fd.append('tazkiraNumber', form.tazkiraNumber.trim());
       fd.append('phoneNumber', form.phoneNumber.trim());
       fd.append('address', form.address.trim());
+      if (form.email.trim()) fd.append('email', form.email.trim());
+      if (form.password.trim()) fd.append('password', form.password.trim());
       if (photoFile) fd.append('photo', photoFile);
 
       if (editOwner) await carOwnersAPI.update(editOwner.id, fd);
@@ -150,6 +159,7 @@ export default function CarOwnersPage() {
                   <th className="px-4 py-3 text-right text-sm">{t.fatherName}</th>
                   <th className="px-4 py-3 text-right text-sm">{t.tazkiraNumber}</th>
                   <th className="px-4 py-3 text-right text-sm">{t.phone}</th>
+                  <th className="px-4 py-3 text-right text-sm">ایمیل</th>
                   <th className="px-4 py-3 text-right text-sm">{t.address}</th>
                   <th className="px-4 py-3 text-right text-sm">{t.carCount}</th>
                   <th className="px-4 py-3 text-right text-sm">{t.actions}</th>
@@ -157,9 +167,9 @@ export default function CarOwnersPage() {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={9} className="px-4 py-12 text-center text-amber-500">{t.loading}</td></tr>
+                  <tr><td colSpan={10} className="px-4 py-12 text-center text-amber-500">{t.loading}</td></tr>
                 ) : owners.length === 0 ? (
-                  <tr><td colSpan={9} className="px-4 py-12 text-center text-amber-500">{t.noData}</td></tr>
+                  <tr><td colSpan={10} className="px-4 py-12 text-center text-amber-500">{t.noData}</td></tr>
                 ) : owners.map((owner, i) => (
                   <tr key={owner.id} className="border-b border-amber-100 hover:bg-amber-50/40 transition-colors">
                     <td className="px-4 py-3 text-sm text-amber-600">{i + 1}</td>
@@ -176,6 +186,13 @@ export default function CarOwnersPage() {
                     <td className="px-4 py-3 text-sm text-amber-700">{owner.fatherName}</td>
                     <td className="px-4 py-3 text-sm text-amber-700">{owner.tazkiraNumber || '—'}</td>
                     <td className="px-4 py-3 text-sm text-amber-700" dir="ltr">{owner.phoneNumber}</td>
+                    <td className="px-4 py-3 text-sm text-amber-700 max-w-[160px] truncate" dir="ltr">
+                      {owner.email ? (
+                        <span className="inline-flex items-center gap-1">
+                          <Mail className="w-3 h-3 text-amber-400 shrink-0" />{owner.email}
+                        </span>
+                      ) : <span className="text-amber-300">—</span>}
+                    </td>
                     <td className="px-4 py-3 text-sm text-amber-700 max-w-[160px] truncate">{owner.address || '—'}</td>
                     <td className="px-4 py-3">
                       <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-medium">
@@ -248,6 +265,48 @@ export default function CarOwnersPage() {
             <div className="sm:col-span-2">
               <label className={labelCls}>آدرس</label>
               <textarea value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} rows={2} className={`${inputCls('address')} resize-none`} placeholder="آدرس کامل..." />
+            </div>
+            {/* Email field — above password */}
+            <div className="sm:col-span-2">
+              <label className={labelCls}>
+                <span className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" />ایمیل (اختیاری)</span>
+              </label>
+              <div className="relative">
+                <Mail className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-400 pointer-events-none" />
+                <input
+                  type="email"
+                  value={form.email}
+                  onChange={e => setForm({ ...form, email: e.target.value })}
+                  className={`${inputCls('email')} pl-4`}
+                  placeholder="example@email.com"
+                  dir="ltr"
+                />
+              </div>
+              {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
+              <p className="text-amber-600 text-xs mt-1">ایمیل منحصر به فرد — صاحب موتر با این ایمیل وارد پنل می‌شود</p>
+            </div>
+
+            {/* Password field */}
+            <div className="sm:col-span-2">
+              <label className={labelCls}>
+                <span className="flex items-center gap-1.5"><KeyRound className="w-3.5 h-3.5" />{editOwner ? 'رمز عبور جدید (اختیاری)' : 'رمز عبور (اختیاری)'}</span>
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={form.password}
+                  onChange={e => setForm({ ...form, password: e.target.value })}
+                  className={`${inputCls('password')} pl-10`}
+                  placeholder={editOwner ? 'برای تغییر رمز، رمز جدید وارد کنید' : 'رمز عبور برای ورود به پنل'}
+                  dir="ltr"
+                />
+                <button type="button" onClick={() => setShowPassword(!showPassword)}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-500 hover:text-amber-700">
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password}</p>}
+              <p className="text-amber-600 text-xs mt-1">حداقل ۶ کاراکتر — همراه با ایمیل برای ورود به پنل استفاده می‌شود</p>
             </div>
           </div>
         </div>

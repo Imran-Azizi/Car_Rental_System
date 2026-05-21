@@ -176,14 +176,27 @@ export default function CarsPage() {
   const [saving, setSaving]   = useState(false);
   const [deleteId, setDeleteId] = useState<string|null>(null);
   const [imageCarId, setImageCarId] = useState<string|null>(null);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
 
-  useEffect(() => { if (!token) router.push('/'); else { fetchCars(); fetchOwners(); } }, [token]);
-  useEffect(() => { if (token) fetchCars(); }, [search, statusFilter]);
+  // Debounce search input
+  useEffect(() => {
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => setDebouncedSearch(search), 400);
+    return () => { if (searchTimer.current) clearTimeout(searchTimer.current); };
+  }, [search]);
+
+  // Single combined effect — no double-fetch on mount
+  useEffect(() => {
+    if (!token) { router.push('/'); return; }
+    fetchCars();
+    if (owners.length === 0) fetchOwners();
+  }, [token, debouncedSearch, statusFilter]);
 
   const fetchCars = async () => {
     setLoading(true);
     try {
-      const res = await carsAPI.getAll({ search, status: statusFilter });
+      const res = await carsAPI.getAll({ search: debouncedSearch, status: statusFilter });
       setCars(res.data.data);
     } catch { toast.error(t.error); } finally { setLoading(false); }
   };

@@ -72,11 +72,20 @@ export const addPayment = async (req, res) => {
   try {
     const { id } = req.params;
     const { amount, paymentMethod, notes } = req.body;
-    const payment = await prisma.payment.create({ data: { contractId: id, amount: parseFloat(amount), paymentMethod, notes } });
-    const contract = await prisma.rentalContract.findUnique({ where: { id }, include: { payments: true } });
-    const totalPaid = contract.payments.reduce((s, p) => s + p.amount, 0);
-    const remaining = contract.totalRent - totalPaid;
-    await prisma.rentalContract.update({ where: { id }, data: { remainingAmount: Math.max(0, remaining) } });
+    const payment = await prisma.payment.create({
+      data: { contractId: id, amount: parseFloat(amount), paymentMethod, notes },
+    });
+    // Use aggregate instead of fetching all payments (avoids N+1)
+    const [totalPaidResult, contract] = await Promise.all([
+      prisma.payment.aggregate({ _sum: { amount: true }, where: { contractId: id } }),
+      prisma.rentalContract.findUnique({ where: { id }, select: { totalRent: true } }),
+    ]);
+    const totalPaid = totalPaidResult._sum.amount || 0;
+    const remaining = (contract?.totalRent || 0) - totalPaid;
+    await prisma.rentalContract.update({
+      where: { id },
+      data: { remainingAmount: Math.max(0, remaining) },
+    });
     sendSuccess(res, payment, 'پرداخت موفقانه ثبت شد', 201);
   } catch (err) { sendError(res, err.message); }
 };

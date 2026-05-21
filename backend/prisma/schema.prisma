@@ -25,9 +25,14 @@ model CarOwner {
   photo         String?
   phoneNumber   String
   address       String?
+  email         String?  @unique
+  password      String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   cars          Car[]
+
+  @@index([fullName])
+  @@index([phoneNumber])
 }
 
 model Car {
@@ -47,6 +52,10 @@ model Car {
   owner           CarOwner?       @relation(fields: [ownerId], references: [id])
   rentalContracts RentalContract[]
   images          CarImage[]
+  expenses        Expense[]
+
+  @@index([status])
+  @@index([carName])
 }
 
 model CarImage {
@@ -76,6 +85,9 @@ model Customer {
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
   rentalContracts  RentalContract[]
+
+  @@index([fullName])
+  @@index([phoneNumber])
 }
 
 model Guarantor {
@@ -96,6 +108,9 @@ model Guarantor {
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
   rentalContracts  RentalContract[]
+
+  @@index([fullName])
+  @@index([phoneNumber])
 }
 
 model RentalContract {
@@ -126,6 +141,12 @@ model RentalContract {
   customer            Customer       @relation(fields: [customerId], references: [id])
   guarantor           Guarantor?     @relation(fields: [guarantorId], references: [id])
   payments            Payment[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([customerId])
+  @@index([carId])
+  @@index([status, remainingAmount])
 }
 
 model Payment {
@@ -137,6 +158,28 @@ model Payment {
   notes            String?
   createdAt        DateTime       @default(now())
   rentalContract   RentalContract @relation(fields: [contractId], references: [id])
+
+  @@index([contractId])
+  @@index([paymentDate])
+  @@index([createdAt])
+}
+
+model Expense {
+  id          String   @id @default(cuid())
+  fromWhom    String
+  toWhom      String
+  amount      Float
+  date        DateTime
+  description String?
+  carId       String?
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  car         Car?     @relation(fields: [carId], references: [id])
+
+  @@index([date])
+  @@index([carId])
+  @@index([createdAt])
 }
 
 enum Role {
