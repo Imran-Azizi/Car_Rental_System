@@ -6,12 +6,13 @@ import StatCard from '@/components/ui/StatCard';
 import { useApp } from '@/lib/context';
 import { dashboardAPI } from '@/lib/api';
 import {
-  Car, Users, FileText, DollarSign, CheckCircle, Clock,
-  AlertCircle, TrendingUp, CreditCard, ChevronLeft,
+  Car, Users, FileText, CheckCircle, Clock,
+  TrendingUp, ChevronLeft,
   ListOrdered, Wallet, BadgeCheck, Hourglass,
+  UserCheck, ShieldCheck,
 } from 'lucide-react';
 import Link from 'next/link';
-import { formatAfghanDate } from '@/lib/utils';
+import { formatAfghanDate, formatCurrency as fmtCur, formatNumber } from '@/lib/utils';
 
 const statusLabel: Record<string, { dari: string; pashto: string; cls: string }> = {
   ACTIVE:    { dari: 'فعال',  pashto: 'فعال',   cls: 'badge-active'    },
@@ -47,8 +48,7 @@ export default function DashboardPage() {
       .finally(() => setLoading(false));
   }, [token]);
 
-  const formatCurrency = (n: number | string | undefined) =>
-    `${Number(n || 0).toLocaleString()} ${t.currency}`;
+  const formatCurrency = (n: number | string | undefined) => fmtCur(n, t.currency);
 
   if (loading) {
     return (
@@ -58,10 +58,12 @@ export default function DashboardPage() {
             <div className="skeleton h-8 w-48 rounded mb-2" />
             <div className="skeleton h-4 w-32 rounded" />
           </div>
+          {/* Top 4 money cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {/* 8 stat cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)}
           </div>
         </div>
@@ -70,47 +72,107 @@ export default function DashboardPage() {
   }
 
   const pendingContractsList: any[] = stats?.pendingContractsList || [];
-  const recentPaymentsList: any[]   = stats?.recentPaymentsList || [];
+  const recentPaymentsList: any[]   = stats?.recentPaymentsList   || [];
 
   return (
     <MainLayout>
       <div className="space-y-6 page-enter">
-        {/* Title */}
+
+        {/* ── Title ─────────────────────────────────────────────── */}
         <div>
           <h2 className="text-2xl font-bold text-amber-900">{t.dashboard}</h2>
           <p className="text-amber-600 text-sm mt-1">{t.appName}</p>
         </div>
 
-        {/* ── 4 primary money cards ─────────────────────── */}
+        {/* ── Revenue split — TOP PRIORITY ──────────────────────── */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Owner share */}
+          <div className="rounded-2xl overflow-hidden shadow-md" style={{ border: '2px solid #0d9488' }}>
+            <div className="flex items-center gap-3 px-5 py-4" style={{ background: 'linear-gradient(135deg,#0d9488,#0f766e)' }}>
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-white/20 shrink-0">
+                <UserCheck className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-white text-base leading-tight">
+                  {lang === 'dari' ? 'سهم صاحب موتر' : 'د موتر د خاوند برخه'}
+                </p>
+                <p className="text-teal-200 text-xs mt-0.5">
+                  {lang === 'dari' ? 'از همه سفارش‌ها' : 'له ټولو سفارشونو'}
+                </p>
+              </div>
+              <span className="text-sm font-black text-white bg-white/25 px-3 py-1 rounded-full shrink-0">50%</span>
+            </div>
+            <div className="px-5 py-5" style={{ background: 'linear-gradient(135deg,#f0fdfa,#ccfbf1)' }}>
+              <p className="text-3xl font-black" style={{ color: '#0f766e' }}>
+                {formatCurrency(stats?.ownerIncome ?? 0)}
+              </p>
+              {(stats?.ownerIncomeCompleted ?? 0) > 0 && (
+                <p className="text-xs mt-2 font-medium" style={{ color: '#047857' }}>
+                  {lang === 'dari' ? 'تکمیل‌شده:' : 'بشپړ:'} {formatCurrency(stats?.ownerIncomeCompleted ?? 0)}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Admin share */}
+          <div className="rounded-2xl overflow-hidden shadow-md" style={{ border: '2px solid #7c3aed' }}>
+            <div className="flex items-center gap-3 px-5 py-4" style={{ background: 'linear-gradient(135deg,#7c3aed,#5b21b6)' }}>
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-white/20 shrink-0">
+                <ShieldCheck className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-white text-base leading-tight">
+                  {lang === 'dari' ? 'سهم ادمین' : 'د ادمین برخه'}
+                </p>
+                <p className="text-purple-200 text-xs mt-0.5">
+                  {lang === 'dari' ? 'از همه سفارش‌ها' : 'له ټولو سفارشونو'}
+                </p>
+              </div>
+              <span className="text-sm font-black text-white bg-white/25 px-3 py-1 rounded-full shrink-0">50%</span>
+            </div>
+            <div className="px-5 py-5" style={{ background: 'linear-gradient(135deg,#faf5ff,#ede9fe)' }}>
+              <p className="text-3xl font-black" style={{ color: '#5b21b6' }}>
+                {formatCurrency(stats?.adminIncome ?? 0)}
+              </p>
+              {(stats?.adminIncomeCompleted ?? 0) > 0 && (
+                <p className="text-xs mt-2 font-medium" style={{ color: '#4c1d95' }}>
+                  {lang === 'dari' ? 'تکمیل‌شده:' : 'بشپړ:'} {formatCurrency(stats?.adminIncomeCompleted ?? 0)}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ── 4 money summary cards ──────────────────────────────── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
             {
-              label: lang === 'dari' ? 'همه سفارش‌ها' : 'ټول سفارشونه',
-              value: (stats?.totalContractsCount || 0).toLocaleString(),
-              icon: ListOrdered,
+              label:    lang === 'dari' ? 'همه سفارش‌ها'         : 'ټول سفارشونه',
+              value:    formatNumber(stats?.totalContractsCount || 0),
+              icon:     ListOrdered,
               gradient: 'linear-gradient(135deg,#f59e0b,#d97706)',
-              href: '/contracts',
+              href:     '/orders',
             },
             {
-              label: lang === 'dari' ? 'مجموع پول سفارش‌ها' : 'د سفارشونو ټول پیسې',
-              value: formatCurrency(stats?.totalContractValue),
-              icon: Wallet,
+              label:    lang === 'dari' ? 'مجموع پول سفارش‌ها'     : 'د سفارشونو ټول پیسې',
+              value:    formatCurrency(stats?.totalContractValue),
+              icon:     Wallet,
               gradient: 'linear-gradient(135deg,#0891b2,#0e7490)',
-              href: '/contracts',
+              href:     '/orders',
             },
             {
-              label: lang === 'dari' ? 'مجموع پول دریافتی' : 'ترلاسه شوي ټول پیسې',
-              value: formatCurrency(stats?.totalReceived),
-              icon: BadgeCheck,
+              label:    lang === 'dari' ? 'مجموع پول دریافتی'     : 'ترلاسه شوي ټول پیسې',
+              value:    formatCurrency(stats?.totalReceived),
+              icon:     BadgeCheck,
               gradient: 'linear-gradient(135deg,#059669,#047857)',
-              href: '/contracts',
+              href:     '/orders',
             },
             {
-              label: lang === 'dari' ? 'مجموع پول باقی‌مانده' : 'پاتې ټول پیسې',
-              value: formatCurrency(stats?.pendingPayments),
-              icon: Hourglass,
+              label:    lang === 'dari' ? 'مجموع پول باقی‌مانده'   : 'پاتې ټول پیسې',
+              value:    formatCurrency(stats?.pendingPayments),
+              icon:     Hourglass,
               gradient: 'linear-gradient(135deg,#dc2626,#b91c1c)',
-              href: '/contracts',
+              href:     '/orders',
             },
           ].map(({ label, value, icon: Icon, gradient, href }) => (
             <Link key={label} href={href}
@@ -127,61 +189,26 @@ export default function DashboardPage() {
           ))}
         </div>
 
-        {/* ── Stats grid ────────────────────────────────── */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard title={t.totalCars}         value={stats?.totalCars || 0}         icon={Car}         color="linear-gradient(135deg,#f59e0b,#d97706)"/>
-          <StatCard title={t.availableCars}      value={stats?.availableCars || 0}      icon={Car}         color="linear-gradient(135deg,#059669,#047857)"/>
-          <StatCard title={t.rentedCars}         value={stats?.rentedCars || 0}         icon={Car}         color="linear-gradient(135deg,#dc2626,#b91c1c)"/>
-          <StatCard title={t.totalCustomers}     value={stats?.totalCustomers || 0}     icon={Users}       color="linear-gradient(135deg,#7c3aed,#6d28d9)"/>
-          <StatCard title={t.activeContracts}    value={stats?.activeContracts || 0}    icon={Clock}       color="linear-gradient(135deg,#0891b2,#0e7490)"/>
-          <StatCard title={t.completedContracts} value={stats?.completedContracts || 0} icon={CheckCircle} color="linear-gradient(135deg,#16a34a,#15803d)"/>
-          <StatCard title={t.overdueContracts}   value={stats?.overdueContracts || 0}   icon={AlertCircle} color="linear-gradient(135deg,#e11d48,#be123c)"/>
-          <StatCard title={t.totalIncome}        value={formatCurrency(stats?.totalIncome)} icon={DollarSign} color="linear-gradient(135deg,#92400e,#b45309)"/>
+        {/* ── 6 stat cards (cars + contracts) ─────────────────── */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <StatCard title={t.totalCars}         value={stats?.totalCars         || 0} icon={Car}         color="linear-gradient(135deg,#f59e0b,#d97706)" />
+          <StatCard title={t.availableCars}      value={stats?.availableCars      || 0} icon={Car}         color="linear-gradient(135deg,#059669,#047857)" />
+          <StatCard title={t.rentedCars}         value={stats?.rentedCars         || 0} icon={Car}         color="linear-gradient(135deg,#dc2626,#b91c1c)" />
+          <StatCard title={t.totalCustomers}     value={stats?.totalCustomers     || 0} icon={Users}       color="linear-gradient(135deg,#7c3aed,#6d28d9)" />
+          <StatCard title={t.activeContracts}    value={stats?.activeContracts    || 0} icon={Clock}       color="linear-gradient(135deg,#0891b2,#0e7490)" />
+          <StatCard title={t.completedContracts} value={stats?.completedContracts || 0} icon={CheckCircle} color="linear-gradient(135deg,#16a34a,#15803d)" />
         </div>
 
-        {/* ── Payment summary cards ──────────────────────── */}
-        <div>
-          <h3 className="text-lg font-bold text-amber-900 mb-3">{t.payments}</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="card-golden rounded-2xl p-5">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-sm" style={{ background: 'linear-gradient(135deg,#059669,#047857)' }}>
-                  <TrendingUp className="w-5 h-5 text-white"/>
-                </div>
-                <p className="text-sm font-medium text-amber-700">{lang === 'dari' ? 'مجموع دریافتی' : 'ټول ترلاسه شوي'}</p>
-              </div>
-              <p className="text-2xl font-bold text-green-700">{formatCurrency(stats?.totalIncome)}</p>
-            </div>
-            <div className="card-golden rounded-2xl p-5">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-sm" style={{ background: 'linear-gradient(135deg,#dc2626,#b91c1c)' }}>
-                  <AlertCircle className="w-5 h-5 text-white"/>
-                </div>
-                <p className="text-sm font-medium text-amber-700">{t.pendingPayments}</p>
-              </div>
-              <p className="text-2xl font-bold text-red-600">{formatCurrency(stats?.pendingPayments)}</p>
-            </div>
-            <div className="card-golden rounded-2xl p-5">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-sm" style={{ background: 'linear-gradient(135deg,#f59e0b,#d97706)' }}>
-                  <CreditCard className="w-5 h-5 text-white"/>
-                </div>
-                <p className="text-sm font-medium text-amber-700">{lang === 'dari' ? 'تعداد پرداخت‌ها' : 'د تادیو شمیر'}</p>
-              </div>
-              <p className="text-2xl font-bold text-amber-900">{recentPaymentsList.length > 0 ? `${recentPaymentsList.length}+` : 0}</p>
-            </div>
-          </div>
-        </div>
-
-        {/* ── Payment records + monthly income ──────────── */}
+        {/* ── Payment records + monthly income ──────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
           {/* Payment tabs — 2/3 width */}
           <div className="lg:col-span-2 card-golden rounded-2xl overflow-hidden">
             <div className="px-5 pt-4 pb-0 border-b border-amber-100 flex items-center justify-between gap-4">
               <div className="flex gap-1">
                 {([
-                  { key: 'pending', label: lang === 'dari' ? 'باقی‌مانده' : 'پاتې' },
-                  { key: 'latest',  label: lang === 'dari' ? 'آخرین پرداخت‌ها' : 'وروستي تادیات' },
+                  { key: 'pending', label: lang === 'dari' ? 'باقی‌مانده'        : 'پاتې' },
+                  { key: 'latest',  label: lang === 'dari' ? 'آخرین پرداخت‌ها'   : 'وروستي تادیات' },
                 ] as const).map(tab => (
                   <button key={tab.key} onClick={() => setPayTab(tab.key)}
                     className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-all ${
@@ -190,60 +217,74 @@ export default function DashboardPage() {
                         : 'border-transparent text-amber-500 hover:text-amber-700 hover:bg-amber-50/30'
                     }`}>
                     {tab.label}
-                    {tab.key === 'pending' && pendingContractsList.length > 0 &&
+                    {tab.key === 'pending' && pendingContractsList.length > 0 && (
                       <span className="mr-1.5 text-xs px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 font-semibold">
                         {pendingContractsList.length}
                       </span>
-                    }
+                    )}
                   </button>
                 ))}
               </div>
-              <Link href="/contracts" className="text-amber-500 text-xs hover:text-amber-700 flex items-center gap-1 pb-2.5 transition-colors">
-                {lang === 'dari' ? 'همه قراردادها' : 'ټول قراردادونه'}<ChevronLeft className="w-3 h-3"/>
+              <Link href="/orders"
+                className="text-amber-500 text-xs hover:text-amber-700 flex items-center gap-1 pb-2.5 transition-colors">
+                {lang === 'dari' ? 'همه سفارش‌ها' : 'ټول سفارشونه'}<ChevronLeft className="w-3 h-3" />
               </Link>
             </div>
 
             <div className="p-4">
               {payTab === 'pending' && (
                 pendingContractsList.length === 0
-                  ? <div className="empty-state">
-                      <CheckCircle className="w-10 h-10 text-green-400"/>
+                  ? (
+                    <div className="empty-state">
+                      <CheckCircle className="w-10 h-10 text-green-400" />
                       <p className="text-sm">{lang === 'dari' ? 'هیچ پرداخت باقی‌مانده‌ای وجود ندارد' : 'هیڅ پاتې تادیه نشته'}</p>
                     </div>
-                  : <div className="space-y-2 max-h-72 overflow-y-auto">
+                  ) : (
+                    <div className="space-y-2 max-h-72 overflow-y-auto">
                       {pendingContractsList.map((c: any) => (
-                        <div key={c.id} className="flex items-center justify-between p-3 rounded-xl bg-amber-50 hover:bg-amber-100 transition-colors gap-3">
+                        <div key={c.id}
+                          className="flex items-center justify-between p-3 rounded-xl bg-amber-50 hover:bg-amber-100 transition-colors gap-3">
                           <div className="min-w-0">
                             <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                              <span className="font-mono text-xs text-amber-600 bg-amber-100 px-2 py-0.5 rounded shrink-0">{c.contractNumber}</span>
+                              <span className="font-mono text-xs text-amber-600 bg-amber-100 px-2 py-0.5 rounded shrink-0">
+                                {c.contractNumber}
+                              </span>
                             </div>
                             <p className="font-medium text-amber-900 text-sm truncate">{c.customer?.fullName}</p>
                             <p className="text-xs text-amber-500">{c.car?.carName} — {c.car?.plateNumber}</p>
                           </div>
                           <div className="text-left shrink-0">
                             <p className="text-xs text-amber-500">{t.remainingAmount}</p>
-                            <p className="text-base font-bold text-red-600 whitespace-nowrap">{formatCurrency(c.remainingAmount)}</p>
+                            <p className="text-base font-bold text-red-600 whitespace-nowrap">
+                              {formatCurrency(c.remainingAmount)}
+                            </p>
                           </div>
                         </div>
                       ))}
                     </div>
+                  )
               )}
 
               {payTab === 'latest' && (
                 recentPaymentsList.length === 0
                   ? <div className="empty-state"><p className="text-sm">{t.noData}</p></div>
-                  : <div className="table-wrapper">
+                  : (
+                    <div className="table-wrapper">
                       <table className="w-full table-golden min-w-[420px]">
-                        <thead><tr>
-                          <th className="px-3 py-2.5 text-right text-xs">{t.contractNo}</th>
-                          <th className="px-3 py-2.5 text-right text-xs">{t.customer}</th>
-                          <th className="px-3 py-2.5 text-right text-xs">{t.amount}</th>
-                          <th className="px-3 py-2.5 text-right text-xs">{t.date}</th>
-                        </tr></thead>
+                        <thead>
+                          <tr>
+                            <th className="px-3 py-2.5 text-right text-xs">{t.contractNo}</th>
+                            <th className="px-3 py-2.5 text-right text-xs">{t.customer}</th>
+                            <th className="px-3 py-2.5 text-right text-xs">{t.amount}</th>
+                            <th className="px-3 py-2.5 text-right text-xs">{t.date}</th>
+                          </tr>
+                        </thead>
                         <tbody>
                           {recentPaymentsList.map((p: any) => (
                             <tr key={p.id} className="border-b border-amber-100">
-                              <td className="px-3 py-2 text-xs font-mono text-amber-600">{p.rentalContract?.contractNumber}</td>
+                              <td className="px-3 py-2 text-xs font-mono text-amber-600">
+                                {p.rentalContract?.contractNumber}
+                              </td>
                               <td className="px-3 py-2 text-xs">{p.rentalContract?.customer?.fullName}</td>
                               <td className="px-3 py-2 text-xs font-bold text-green-700">{formatCurrency(p.amount)}</td>
                               <td className="px-3 py-2 text-xs text-amber-500">{formatAfghanDate(p.paymentDate)}</td>
@@ -252,11 +293,12 @@ export default function DashboardPage() {
                         </tbody>
                       </table>
                     </div>
+                  )
               )}
             </div>
           </div>
 
-          {/* Monthly income — 1/3 width */}
+          {/* Monthly income bar chart — 1/3 width */}
           <div className="card-golden rounded-2xl p-5">
             <h3 className="font-bold text-amber-900 mb-4">{t.monthlyIncome}</h3>
             {stats?.monthlyIncome && Object.keys(stats.monthlyIncome).length > 0 ? (
@@ -272,7 +314,7 @@ export default function DashboardPage() {
                       </div>
                       <div className="h-2 bg-amber-100 rounded-full overflow-hidden">
                         <div className="h-full rounded-full transition-all duration-500"
-                          style={{ width: `${pct}%`, background: 'linear-gradient(90deg,#fbbf24,#d97706)' }}/>
+                          style={{ width: `${pct}%`, background: 'linear-gradient(90deg,#fbbf24,#d97706)' }} />
                       </div>
                     </div>
                   );
@@ -284,12 +326,13 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* ── Recent contracts table ─────────────────────── */}
+        {/* ── Recent contracts table ─────────────────────────────── */}
         <div className="card-golden rounded-2xl overflow-hidden">
           <div className="p-5 border-b border-amber-100 flex justify-between items-center">
             <h3 className="font-bold text-amber-900">{t.recentContracts}</h3>
-            <Link href="/contracts" className="text-amber-600 text-sm hover:text-amber-800 transition-colors flex items-center gap-1">
-              {t.view}<ChevronLeft className="w-3.5 h-3.5"/>
+            <Link href="/orders"
+              className="text-amber-600 text-sm hover:text-amber-800 transition-colors flex items-center gap-1">
+              {t.view}<ChevronLeft className="w-3.5 h-3.5" />
             </Link>
           </div>
           <div className="table-wrapper">
@@ -320,12 +363,15 @@ export default function DashboardPage() {
                   </tr>
                 ))}
                 {!stats?.recentContracts?.length && (
-                  <tr><td colSpan={6} className="px-4 py-8 text-center text-amber-400 text-sm">{t.noData}</td></tr>
+                  <tr>
+                    <td colSpan={6} className="px-4 py-8 text-center text-amber-400 text-sm">{t.noData}</td>
+                  </tr>
                 )}
               </tbody>
             </table>
           </div>
         </div>
+
       </div>
     </MainLayout>
   );

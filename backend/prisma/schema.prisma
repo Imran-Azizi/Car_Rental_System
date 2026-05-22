@@ -127,6 +127,8 @@ model RentalContract {
   totalRent           Float
   advancePayment      Float          @default(0)
   remainingAmount     Float
+  ownerShare          Float          @default(0)
+  adminShare          Float          @default(0)
   status              ContractStatus @default(ACTIVE)
   carStatus           String?
   conditions          String?
@@ -135,6 +137,8 @@ model RentalContract {
   managerSignature    String?
   agreementConfirmed  Boolean        @default(false)
   notes               String?
+  billDocPhoto        String?
+  tazkiraDocPhoto     String?
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
   car                 Car            @relation(fields: [carId], references: [id])
@@ -199,4 +203,16 @@ enum ContractStatus {
   COMPLETED
   CANCELLED
   OVERDUE
+}
+
+model OrderDraft {
+  id        String   @id @default(cuid())
+  name      String?
+  step      Int      @default(0)
+  formData  Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([updatedAt])
+  @@index([createdAt])
 }

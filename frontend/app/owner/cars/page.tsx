@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { ownerPortalAPI } from '@/lib/api';
 import { Car, Search, Filter, Image as ImageIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { formatCurrency } from '@/lib/utils';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:5000';
 
@@ -13,10 +14,6 @@ const statusConfig: Record<string, { label: string; color: string; bg: string; d
   MAINTENANCE: { label: 'تعمیر', color: '#d97706', bg: '#fef3c7', dot: '#f59e0b' },
   INACTIVE: { label: 'غیرفعال', color: '#6b7280', bg: '#f3f4f6', dot: '#9ca3af' },
 };
-
-function formatAFN(amount: number) {
-  return new Intl.NumberFormat('fa-AF').format(Math.round(amount)) + ' ؋';
-}
 
 export default function OwnerCarsPage() {
   const router = useRouter();
@@ -135,7 +132,7 @@ export default function OwnerCarsPage() {
 
                   <div className="flex items-center justify-between text-xs text-amber-600 mb-3">
                     <span>رنگ: {car.color}</span>
-                    <span>{formatAFN(car.dailyRate)} / روز</span>
+                    <span>{formatCurrency(car.dailyRate)} / روز</span>
                   </div>
 
                   {activeContract && (

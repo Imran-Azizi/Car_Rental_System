@@ -1,6 +1,6 @@
 /**
- * Format a date/datetime in Afghanistan Shamsi (Solar Hijri) calendar.
- * Uses Asia/Kabul timezone and fa-AF locale so digits are Eastern Arabic.
+ * Format a date/datetime in Afghanistan Shamsi (Solar Hijri) calendar
+ * with English/Latin digits (nu-latn).
  * showTime=true appends HH:mm in 24-hour format.
  */
 export function formatAfghanDate(date: string | Date | null | undefined, showTime = false): string {
@@ -14,7 +14,8 @@ export function formatAfghanDate(date: string | Date | null | undefined, showTim
     day:   '2-digit',
     ...(showTime ? { hour: '2-digit', minute: '2-digit', hour12: false } : {}),
   };
-  return new Intl.DateTimeFormat('fa-AF-u-ca-persian', opts).format(d);
+  // ca-persian = Solar Hijri (Shamsi); nu-latn = Latin/English numerals
+  return new Intl.DateTimeFormat('fa-AF-u-ca-persian-nu-latn', opts).format(d);
 }
 
 /** Convert Persian/Dari (۰-۹) and Arabic-Indic (٠-٩) numerals to ASCII digits */
@@ -31,13 +32,41 @@ export function parseNum(str: string | number): number {
   return parseFloat(english) || 0;
 }
 
-/** Handle change for a numeric text input:
- *  - accepts Persian/Dari digits
- *  - converts to English digits in-place
- *  - calls setValue with the cleaned string */
-export function numericInputHandler(setValue: (v: string) => void) {
+/** Format a number with English digits and thousands separators — no currency symbol */
+export function formatNumber(amount: number | string | undefined): string {
+  const n = typeof amount === 'number' ? amount : parseNum(String(amount ?? 0));
+  return Math.round(n).toLocaleString('en-US');
+}
+
+/** Format a number as Afghan currency with English digits: "1,500 ؋" */
+export function formatCurrency(amount: number | string | undefined, suffix = '؋'): string {
+  return `${formatNumber(amount)} ${suffix}`;
+}
+
+/** onChange handler for a numeric text input — converts Persian/Dari digits to English */
+export function numericInputHandler(setValue: (v: string) => void, allowDecimal = true) {
   return (e: React.ChangeEvent<HTMLInputElement>) => {
-    const cleaned = toEnglishNums(e.target.value).replace(/[^0-9.]/g, '');
+    const raw = toEnglishNums(e.target.value);
+    const cleaned = allowDecimal
+      ? raw.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1')
+      : raw.replace(/[^0-9]/g, '');
     setValue(cleaned);
+  };
+}
+
+/** Returns { onChange, onPaste } props for a numeric input — handles paste of Dari digits */
+export function numericInputProps(setValue: (v: string) => void, allowDecimal = true) {
+  const clean = (v: string) => {
+    const eng = toEnglishNums(v);
+    return allowDecimal
+      ? eng.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1')
+      : eng.replace(/[^0-9]/g, '');
+  };
+  return {
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => setValue(clean(e.target.value)),
+    onPaste:  (e: React.ClipboardEvent<HTMLInputElement>) => {
+      e.preventDefault();
+      setValue(clean(e.clipboardData.getData('text')));
+    },
   };
 }

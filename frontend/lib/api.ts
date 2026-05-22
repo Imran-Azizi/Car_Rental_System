@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
-const api = axios.create({ baseURL: API_URL });
+const api = axios.create({ baseURL: API_URL, withCredentials: true });
 
 api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
@@ -17,6 +17,7 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401 && typeof window !== 'undefined') {
       localStorage.removeItem('token');
+      localStorage.removeItem('user');
       window.location.href = '/';
     }
     return Promise.reject(error);
@@ -24,7 +25,7 @@ api.interceptors.response.use(
 );
 
 // Separate Axios instance for owner portal (uses ownerToken)
-const ownerApi = axios.create({ baseURL: API_URL });
+const ownerApi = axios.create({ baseURL: API_URL, withCredentials: true });
 
 ownerApi.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
@@ -47,9 +48,10 @@ ownerApi.interceptors.response.use(
 );
 
 export const authAPI = {
-  // Unified login — handles both Admin and Car Owner by email + password
   login: (data: { email: string; password: string }) => api.post('/auth/login', data),
   getMe: () => api.get('/auth/me'),
+  refresh: () => api.post('/auth/refresh'),
+  logout: () => api.post('/auth/logout'),
 };
 
 export const carsAPI = {
@@ -93,11 +95,19 @@ export const guarantorsAPI = {
   delete: (id: string) => api.delete(`/guarantors/${id}`),
 };
 
-export const contractsAPI = {
+const multipart = { 'Content-Type': 'multipart/form-data' };
+
+export const ordersAPI = {
   getAll: (params?: any) => api.get('/contracts', { params }),
   getById: (id: string) => api.get(`/contracts/${id}`),
-  create: (data: any) => api.post('/contracts', data),
-  update: (id: string, data: any) => api.put(`/contracts/${id}`, data),
+  create: (data: FormData | any) =>
+    data instanceof FormData
+      ? api.post('/contracts', data, { headers: multipart })
+      : api.post('/contracts', data),
+  update: (id: string, data: FormData | any) =>
+    data instanceof FormData
+      ? api.put(`/contracts/${id}`, data, { headers: multipart })
+      : api.put(`/contracts/${id}`, data),
   markReturned: (id: string) => api.patch(`/contracts/${id}/return`),
   addPayment: (id: string, data: any) => api.post(`/contracts/${id}/payment`, data),
   delete: (id: string) => api.delete(`/contracts/${id}`),
@@ -127,13 +137,22 @@ export const expensesAPI = {
 export const ownerAuthAPI = {
   login: (data: { phoneNumber: string; password: string }) => api.post('/owner-auth/login', data),
   getMe: () => ownerApi.get('/owner-auth/me'),
+  refresh: () => ownerApi.post('/owner-auth/refresh'),
+  logout: () => ownerApi.post('/owner-auth/logout'),
 };
 
 export const ownerPortalAPI = {
   getDashboard: () => ownerApi.get('/owner-portal/dashboard'),
   getCars: (params?: any) => ownerApi.get('/owner-portal/cars', { params }),
   getContracts: (params?: any) => ownerApi.get('/owner-portal/contracts', { params }),
-  getProfile: () => ownerApi.get('/owner-portal/profile'),
+};
+
+export const draftsAPI = {
+  getAll: ()                     => api.get('/drafts'),
+  getById: (id: string)          => api.get(`/drafts/${id}`),
+  create: (data: any)            => api.post('/drafts', data),
+  update: (id: string, data: any) => api.put(`/drafts/${id}`, data),
+  delete: (id: string)           => api.delete(`/drafts/${id}`),
 };
 
 export default api;

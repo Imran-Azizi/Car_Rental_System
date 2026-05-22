@@ -10,7 +10,7 @@ import { useApp } from '@/lib/context';
 import { carsAPI, carOwnersAPI } from '@/lib/api';
 import { Plus, Search, Edit, Trash2, UserCheck, Camera, X, ChevronLeft, ChevronRight, Images } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { toEnglishNums, parseNum } from '@/lib/utils';
+import { parseNum } from '@/lib/utils';
 
 const Select = dynamic(() => import('react-select'), { ssr: false });
 
@@ -26,7 +26,7 @@ const statusMap: any = {
 
 const emptyForm = {
   ownerId: '', carType: '', carName: '', model: '', color: '',
-  plateNumber: '', engineNumber: '', dailyRate: '', status: 'AVAILABLE', notes: '',
+  plateNumber: '', engineNumber: '', status: 'AVAILABLE', notes: '',
 };
 
 const selectStyles = {
@@ -217,27 +217,21 @@ export default function CarsPage() {
     setForm({
       ownerId: car.ownerId || '', carType: car.carType || '', carName: car.carName,
       model: car.model || '', color: car.color || '', plateNumber: car.plateNumber,
-      engineNumber: car.engineNumber || '', dailyRate: String(car.dailyRate ?? ''),
+      engineNumber: car.engineNumber || '',
       status: car.status, notes: car.notes || '',
     });
     setModalOpen(true);
   };
 
-  const handleDailyRateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const cleaned = toEnglishNums(e.target.value).replace(/[^0-9.]/g, '');
-    setForm(f => ({ ...f, dailyRate: cleaned }));
-  };
-
   const handleSave = async () => {
     if (!form.carName.trim()) return toast.error('نام موتر الزامی است');
     if (!form.plateNumber.trim()) return toast.error('نمبر پلیت الزامی است');
-    if (!form.dailyRate) return toast.error('کرایه روزانه الزامی است');
     setSaving(true);
     try {
       const payload = {
         carType: form.carType, carName: form.carName, model: form.model,
         color: form.color, plateNumber: form.plateNumber, engineNumber: form.engineNumber,
-        dailyRate: parseNum(form.dailyRate), status: form.status,
+        dailyRate: 0, status: form.status,
         ownerId: form.ownerId || null, notes: form.notes,
       };
       if (editCar) await carsAPI.update(editCar.id, payload);
@@ -292,16 +286,15 @@ export default function CarsPage() {
                 <th className="px-4 py-3 text-right text-sm">{t.model}</th>
                 <th className="px-4 py-3 text-right text-sm">{t.color}</th>
                 <th className="px-4 py-3 text-right text-sm">{t.plateNumber}</th>
-                <th className="px-4 py-3 text-right text-sm">{t.dailyRate}</th>
                 <th className="px-4 py-3 text-right text-sm">{t.carOwners}</th>
                 <th className="px-4 py-3 text-right text-sm">{t.status}</th>
                 <th className="px-4 py-3 text-right text-sm">{t.actions}</th>
               </tr></thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={10} className="px-4 py-8 text-center text-amber-500">{t.loading}</td></tr>
+                  <tr><td colSpan={9} className="px-4 py-8 text-center text-amber-500">{t.loading}</td></tr>
                 ) : cars.length === 0 ? (
-                  <tr><td colSpan={10} className="px-4 py-8 text-center text-amber-500">{t.noData}</td></tr>
+                  <tr><td colSpan={9} className="px-4 py-8 text-center text-amber-500">{t.noData}</td></tr>
                 ) : cars.map((car, i) => (
                   <tr key={car.id} className="border-b border-amber-100 hover:bg-amber-50/40 transition-colors">
                     <td className="px-4 py-3 text-sm text-amber-600">{i + 1}</td>
@@ -310,7 +303,6 @@ export default function CarsPage() {
                     <td className="px-4 py-3 text-sm">{car.model || '—'}</td>
                     <td className="px-4 py-3 text-sm">{car.color || '—'}</td>
                     <td className="px-4 py-3 text-sm font-mono">{car.plateNumber}</td>
-                    <td className="px-4 py-3 text-sm">{car.dailyRate?.toLocaleString()} {t.currency}</td>
                     <td className="px-4 py-3 text-sm">
                       {car.owner ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-xs font-medium">
@@ -358,10 +350,6 @@ export default function CarsPage() {
           <div><label className={lc}>{t.model}</label><input value={form.model} onChange={e => setForm(f => ({...f, model: e.target.value}))} className={ic}/></div>
           <div><label className={lc}>{t.color}</label><input value={form.color} onChange={e => setForm(f => ({...f, color: e.target.value}))} className={ic}/></div>
           <div><label className={lc}>{t.plateNumber} *</label><input value={form.plateNumber} onChange={e => setForm(f => ({...f, plateNumber: e.target.value}))} className={ic}/></div>
-          <div>
-            <label className={lc}>{t.dailyRate} *</label>
-            <input value={form.dailyRate} onChange={handleDailyRateChange} inputMode="numeric" className={ic} placeholder="0"/>
-          </div>
           <div><label className={lc}>{t.engineNumber}</label><input value={form.engineNumber} onChange={e => setForm(f => ({...f, engineNumber: e.target.value}))} className={ic}/></div>
           <div><label className={lc}>{t.status}</label>
             <select value={form.status} onChange={e => setForm(f => ({...f, status: e.target.value}))} className={ic}>

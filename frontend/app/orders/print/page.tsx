@@ -35,14 +35,22 @@ export default function OrderPrintPage() {
         <p className="text-amber-600 text-sm text-center max-w-xs">
           لطفاً ابتدا یک سفارش جدید ثبت کنید تا بل آن چاپ شود.
         </p>
-        <button
-          onClick={() => router.push('/orders/new')}
-          className="flex items-center gap-2 px-6 py-3 rounded-xl text-white font-bold shadow-lg"
-          style={{ background: 'linear-gradient(135deg,#f59e0b,#d97706)' }}
-        >
-          <ArrowRight className="w-4 h-4" />
-          سفارش جدید
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={() => router.push('/orders/new')}
+            className="flex items-center gap-2 px-6 py-3 rounded-xl text-white font-bold shadow-lg"
+            style={{ background: 'linear-gradient(135deg,#f59e0b,#d97706)' }}
+          >
+            <ArrowRight className="w-4 h-4" />
+            سفارش جدید
+          </button>
+          <button
+            onClick={() => router.push('/orders')}
+            className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold shadow-lg border border-amber-300 text-amber-700"
+          >
+            همه سفارش‌ها
+          </button>
+        </div>
       </div>
     );
   }
@@ -50,7 +58,7 @@ export default function OrderPrintPage() {
   return (
     <ContractBill
       data={billData}
-      onClose={() => router.push('/orders/new')}
+      onClose={() => router.push('/orders')}
     />
   );
 }

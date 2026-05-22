@@ -5,52 +5,48 @@ export const getOwnerDashboard = async (req, res) => {
   try {
     const ownerId = req.owner.id;
 
-    const [cars, contractStats, totalEarnings, activeContracts, recentContracts] = await Promise.all([
-      // All cars with status
+    const [
+      cars, contractStats, totalEarnings, activeContracts,
+      recentContracts, ownerShareAgg, totalContractValue,
+    ] = await Promise.all([
       prisma.car.findMany({
         where: { ownerId },
         select: { id: true, carName: true, carType: true, model: true, color: true, plateNumber: true, status: true, dailyRate: true },
       }),
-
-      // Contract counts grouped by status
       prisma.rentalContract.groupBy({
         by: ['status'],
         where: { car: { ownerId } },
         _count: { id: true },
       }),
-
-      // Total received payments for this owner's cars
       prisma.payment.aggregate({
         where: { rentalContract: { car: { ownerId } } },
         _sum: { amount: true },
       }),
-
-      // Active contracts count
-      prisma.rentalContract.count({
-        where: { car: { ownerId }, status: 'ACTIVE' },
-      }),
-
-      // Recent 5 contracts
+      prisma.rentalContract.count({ where: { car: { ownerId }, status: 'ACTIVE' } }),
       prisma.rentalContract.findMany({
         where: { car: { ownerId } },
         orderBy: { createdAt: 'desc' },
-        take: 5,
+        take: 8,
         select: {
           id: true, contractNumber: true, status: true, startDate: true, endDate: true,
-          totalRent: true, remainingAmount: true,
-          car: { select: { carName: true, plateNumber: true } },
+          totalRent: true, remainingAmount: true, ownerShare: true, adminShare: true,
+          car:      { select: { carName: true, plateNumber: true } },
           customer: { select: { fullName: true, phoneNumber: true } },
         },
       }),
+      prisma.rentalContract.aggregate({
+        where: { car: { ownerId } },
+        _sum: { ownerShare: true },
+      }),
+      prisma.rentalContract.aggregate({
+        where: { car: { ownerId } },
+        _sum: { totalRent: true },
+      }),
     ]);
 
-    const totalCars = cars.length;
+    const totalCars     = cars.length;
     const availableCars = cars.filter(c => c.status === 'AVAILABLE').length;
-    const rentedCars = cars.filter(c => c.status === 'RENTED').length;
-    const totalContractValue = await prisma.rentalContract.aggregate({
-      where: { car: { ownerId } },
-      _sum: { totalRent: true },
-    });
+    const rentedCars    = cars.filter(c => c.status === 'RENTED').length;
 
     const statusMap = {};
     contractStats.forEach(s => { statusMap[s.status] = s._count.id; });
@@ -61,10 +57,11 @@ export const getOwnerDashboard = async (req, res) => {
         availableCars,
         rentedCars,
         activeContracts,
-        totalContractValue: totalContractValue._sum.totalRent || 0,
-        totalReceived: totalEarnings._sum.amount || 0,
-        completedContracts: statusMap['COMPLETED'] || 0,
-        cancelledContracts: statusMap['CANCELLED'] || 0,
+        totalContractValue:  totalContractValue._sum.totalRent || 0,
+        totalReceived:       totalEarnings._sum.amount         || 0,
+        ownerShareTotal:     ownerShareAgg._sum.ownerShare     || 0,
+        completedContracts:  statusMap['COMPLETED'] || 0,
+        cancelledContracts:  statusMap['CANCELLED'] || 0,
       },
       recentContracts,
       cars,
@@ -140,19 +137,3 @@ export const getOwnerContracts = async (req, res) => {
   }
 };
 
-export const getOwnerProfile = async (req, res) => {
-  try {
-    const owner = await prisma.carOwner.findUnique({
-      where: { id: req.owner.id },
-      select: {
-        id: true, fullName: true, fatherName: true, tazkiraNumber: true,
-        phoneNumber: true, address: true, photo: true, createdAt: true,
-        _count: { select: { cars: true } },
-      },
-    });
-    if (!owner) return sendError(res, 'حساب یافت نشد', 404);
-    sendSuccess(res, owner);
-  } catch (err) {
-    sendError(res, err.message);
-  }
-};

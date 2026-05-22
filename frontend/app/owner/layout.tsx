@@ -2,7 +2,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, Car, FileText, User, LogOut, Menu, X, ChevronLeft } from 'lucide-react';
+import { LayoutDashboard, Car, FileText, LogOut, Menu, X, ChevronLeft } from 'lucide-react';
+import { ownerAuthAPI } from '@/lib/api';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:5000';
 
@@ -10,7 +11,6 @@ const navItems = [
   { href: '/owner/dashboard', label: 'داشبورد', icon: LayoutDashboard },
   { href: '/owner/cars', label: 'موترهای من', icon: Car },
   { href: '/owner/contracts', label: 'قراردادها', icon: FileText },
-  { href: '/owner/profile', label: 'پروفایل', icon: User },
 ];
 
 export default function OwnerLayout({ children }: { children: React.ReactNode }) {
@@ -28,7 +28,8 @@ export default function OwnerLayout({ children }: { children: React.ReactNode })
     if (user) setOwner(JSON.parse(user));
   }, []);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try { await ownerAuthAPI.logout(); } catch {}
     localStorage.removeItem('ownerToken');
     localStorage.removeItem('ownerUser');
     router.push('/owner-login');

@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef } from 'react';
 import { Printer, X } from 'lucide-react';
+import { formatAfghanDate } from '@/lib/utils';
 
 /* ─────────────────────────── types ────────────────────────── */
 export interface BillData {
@@ -14,6 +15,7 @@ export interface BillData {
   customerDistrict?: string; customerVillage?: string;
   customerProvince?: string; customerCurrentAddress?: string;
   customerTazkira?: string; customerPhone?: string;
+  customerPhoto?: string;
   guarantorFullName?: string; guarantorFatherName?: string;
   guarantorDistrict?: string; guarantorVillage?: string;
   guarantorProvince?: string; guarantorCurrentAddress?: string;
@@ -289,29 +291,66 @@ export default function ContractBill({ data, lang = 'pashto', onClose, autoPrint
               }} />
             ))}
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {/* Right side: car emoji + manager label */}
-              <div style={{ textAlign: 'right', minWidth: '60px' }}>
-                <div style={{ fontSize: '30px', lineHeight: 1, textAlign: 'center' }}>🚗</div>
-                <div style={{ fontSize: '8.5pt', color: '#6b2e00', fontWeight: 'bold', textAlign: 'center', marginTop: '1px' }}>
+            <div style={{ display: 'flex', alignItems: 'stretch', gap: '8px' }}>
+
+              {/* ── RIGHT column (first in RTL): customer photo + manager label ── */}
+              <div style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center',
+                justifyContent: 'center', gap: '3px',
+                minWidth: '72px', flexShrink: 0,
+              }}>
+                {data.customerPhoto ? (
+                  <img
+                    src={data.customerPhoto.startsWith('http')
+                      ? data.customerPhoto
+                      : `${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:5000'}${data.customerPhoto}`}
+                    alt="مشتری"
+                    style={{
+                      width: '62px', height: '72px',
+                      objectFit: 'cover',
+                      border: '2.5px solid #8B4513',
+                      borderRadius: '6px',
+                      boxShadow: '0 2px 6px rgba(0,0,0,0.18)',
+                    }}
+                    onError={(e: any) => {
+                      e.currentTarget.style.display = 'none';
+                      (e.currentTarget.nextSibling as HTMLElement | null)?.removeAttribute('hidden');
+                    }}
+                  />
+                ) : (
+                  <div style={{
+                    width: '62px', height: '72px',
+                    border: '2px dashed #c8a060',
+                    borderRadius: '6px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '28px', background: '#FFF8DC',
+                  }}>🚗</div>
+                )}
+                <div style={{ fontSize: '7.5pt', color: '#6b2e00', fontWeight: 'bold', textAlign: 'center', whiteSpace: 'nowrap' }}>
                   {tr.managerLabel}
                 </div>
               </div>
 
-              {/* Center: company name */}
-              <div style={{ flex: 1, textAlign: 'center' }}>
+              {/* ── CENTER: company name ── */}
+              <div style={{ flex: 1, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <div style={{ fontSize: '19pt', fontWeight: '900', color: '#8B0000', lineHeight: 1.35 }}>
                   {tr.companyName}
                 </div>
               </div>
 
-              {/* Left side: phone numbers */}
-              <div style={{ textAlign: 'left', minWidth: '80px', direction: 'ltr' }}>
-                <div style={{ fontSize: '9pt', fontWeight: 'bold', color: '#333', lineHeight: 1.8 }}>
+              {/* ── LEFT column (last in RTL): 🚗 icon + phone numbers ── */}
+              <div style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center',
+                justifyContent: 'center', gap: '2px',
+                minWidth: '72px', flexShrink: 0, direction: 'ltr',
+              }}>
+                <div style={{ fontSize: '26px', lineHeight: 1 }}>🚗</div>
+                <div style={{ fontSize: '8.5pt', fontWeight: 'bold', color: '#333', lineHeight: 1.8, textAlign: 'left' }}>
                   <div>📱 0783945133</div>
                   <div>📞 0773492040</div>
                 </div>
               </div>
+
             </div>
           </div>
 
@@ -349,7 +388,7 @@ export default function ContractBill({ data, lang = 'pashto', onClose, autoPrint
             <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
               <span style={{ fontWeight: 'bold', color: '#5c2000' }}>{tr.startDateLabel}</span>
               <span style={{ borderBottom: '1px solid #8B4513', minWidth: '90px', paddingBottom: '1px', color: '#333', direction: 'ltr', textAlign: 'center' }}>
-                {data.startDate}{data.startTime ? ` — ${data.startTime}` : ''}
+                {formatAfghanDate(data.startDate)}{data.startTime ? ` — ${data.startTime}` : ''}
               </span>
             </div>
 
@@ -359,7 +398,7 @@ export default function ContractBill({ data, lang = 'pashto', onClose, autoPrint
             <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
               <span style={{ fontWeight: 'bold', color: '#5c2000' }}>{tr.returnDateLabel}</span>
               <span style={{ borderBottom: '1px solid #8B4513', minWidth: '90px', paddingBottom: '1px', color: '#333', direction: 'ltr', textAlign: 'center' }}>
-                {data.endDate}{data.endTime ? ` — ${data.endTime}` : ''}
+                {formatAfghanDate(data.endDate)}{data.endTime ? ` — ${data.endTime}` : ''}
               </span>
             </div>
           </div>
@@ -496,7 +535,9 @@ export default function ContractBill({ data, lang = 'pashto', onClose, autoPrint
             </div>
           </div>
 
-          {/* ══ FOOTER / SIGNATURES ══ */}
+          {/* ══ FOOTER / SIGNATURES ══
+               RTL order (right → left): Customer | Guarantor | Manager
+          ══ */}
           <div
             style={{
               border: '2px solid #8B4513',
@@ -507,33 +548,48 @@ export default function ContractBill({ data, lang = 'pashto', onClose, autoPrint
               direction: 'rtl',
             }}
           >
-            {/* Right: Guarantor */}
+            {/* Right (first in RTL): Customer */}
             <div style={{ borderLeft: '1px solid #c8a060', padding: '8px 6px', textAlign: 'center' }}>
-              <div style={{ fontSize: '9pt', fontWeight: 'bold', color: '#5c2000', marginBottom: '16px' }}>
-                {tr.footerGuar}
+              <div style={{ fontSize: '9pt', fontWeight: 'bold', color: '#5c2000', marginBottom: '8px' }}>
+                {tr.footerCust}
               </div>
-              <div style={{ borderTop: '1px solid #8B4513', paddingTop: '3px', fontSize: '9pt', color: '#444' }}>
-                {data.guarantorPhone || <span style={{ color: '#bbb' }}>___________</span>}
+              {data.customerPhone && (
+                <div style={{ fontSize: '9.5pt', fontWeight: 'bold', color: '#333', direction: 'ltr', marginBottom: '8px' }}>
+                  {data.customerPhone}
+                </div>
+              )}
+              <div style={{ borderTop: '1px solid #8B4513', paddingTop: '3px', fontSize: '8.5pt', color: '#666', marginTop: data.customerPhone ? '0' : '16px' }}>
+                {lang === 'pashto' ? 'ګوته' : 'انگشت'}: ___________
               </div>
             </div>
 
-            {/* Center: Customer */}
+            {/* Center: Guarantor */}
             <div style={{ borderLeft: '1px solid #c8a060', padding: '8px 6px', textAlign: 'center' }}>
-              <div style={{ fontSize: '9pt', fontWeight: 'bold', color: '#5c2000', marginBottom: '16px' }}>
-                {tr.footerCust}
+              <div style={{ fontSize: '9pt', fontWeight: 'bold', color: '#5c2000', marginBottom: '8px' }}>
+                {tr.footerGuar}
               </div>
-              <div style={{ borderTop: '1px solid #8B4513', paddingTop: '3px', fontSize: '9pt', color: '#444' }}>
-                {data.customerPhone || <span style={{ color: '#bbb' }}>___________</span>}
+              {data.guarantorPhone && (
+                <div style={{ fontSize: '9.5pt', fontWeight: 'bold', color: '#333', direction: 'ltr', marginBottom: '8px' }}>
+                  {data.guarantorPhone}
+                </div>
+              )}
+              <div style={{ borderTop: '1px solid #8B4513', paddingTop: '3px', fontSize: '8.5pt', color: '#666', marginTop: data.guarantorPhone ? '0' : '16px' }}>
+                {lang === 'pashto' ? 'ګوته' : 'انگشت'}: ___________
               </div>
             </div>
 
             {/* Left: Manager */}
             <div style={{ padding: '8px 6px', textAlign: 'center' }}>
-              <div style={{ fontSize: '9pt', fontWeight: 'bold', color: '#5c2000', marginBottom: '16px' }}>
+              <div style={{ fontSize: '9pt', fontWeight: 'bold', color: '#5c2000', marginBottom: '8px' }}>
                 {tr.footerMgr}
               </div>
-              <div style={{ borderTop: '1px solid #8B4513', paddingTop: '3px', fontSize: '9pt', color: '#444' }}>
-                {data.managerSignature || <span style={{ color: '#bbb' }}>___________</span>}
+              <div style={{ marginBottom: '8px', minHeight: '20px' }}>
+                {data.managerSignature && (
+                  <div style={{ fontSize: '9.5pt', fontWeight: 'bold', color: '#333' }}>{data.managerSignature}</div>
+                )}
+              </div>
+              <div style={{ borderTop: '1px solid #8B4513', paddingTop: '3px', fontSize: '8.5pt', color: '#666' }}>
+                {lang === 'pashto' ? 'لاسلیک' : 'امضا'}: ___________
               </div>
             </div>
           </div>

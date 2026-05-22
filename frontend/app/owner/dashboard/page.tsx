@@ -3,8 +3,9 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ownerPortalAPI } from '@/lib/api';
-import { Car, FileText, TrendingUp, DollarSign, CheckCircle, Clock, ArrowLeft, Activity } from 'lucide-react';
+import { Car, FileText, TrendingUp, DollarSign, CheckCircle, Clock, ArrowLeft, Activity, Hourglass } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { formatAfghanDate, formatCurrency } from '@/lib/utils';
 
 const statusLabels: Record<string, { label: string; color: string; bg: string }> = {
   ACTIVE: { label: 'فعال', color: '#16a34a', bg: '#dcfce7' },
@@ -12,14 +13,6 @@ const statusLabels: Record<string, { label: string; color: string; bg: string }>
   CANCELLED: { label: 'لغو شده', color: '#dc2626', bg: '#fee2e2' },
   OVERDUE: { label: 'ناوقت', color: '#d97706', bg: '#fef3c7' },
 };
-
-function formatAFN(amount: number) {
-  return new Intl.NumberFormat('fa-AF').format(Math.round(amount)) + ' ؋';
-}
-
-function formatDate(d: string) {
-  return new Date(d).toLocaleDateString('fa-AF', { year: 'numeric', month: 'short', day: 'numeric' });
-}
 
 export default function OwnerDashboardPage() {
   const router = useRouter();
@@ -61,12 +54,13 @@ export default function OwnerDashboardPage() {
   const { stats, recentContracts, cars } = data || {};
 
   const statCards = [
-    { label: 'مجموع موترها', value: stats?.totalCars ?? 0, icon: Car, gradient: 'linear-gradient(135deg, #f59e0b, #d97706)', suffix: '' },
-    { label: 'موترهای آزاد', value: stats?.availableCars ?? 0, icon: CheckCircle, gradient: 'linear-gradient(135deg, #10b981, #059669)', suffix: '' },
-    { label: 'موترهای کرایه', value: stats?.rentedCars ?? 0, icon: Clock, gradient: 'linear-gradient(135deg, #3b82f6, #2563eb)', suffix: '' },
-    { label: 'قراردادهای فعال', value: stats?.activeContracts ?? 0, icon: FileText, gradient: 'linear-gradient(135deg, #8b5cf6, #7c3aed)', suffix: '' },
-    { label: 'مجموع درآمد', value: formatAFN(stats?.totalContractValue ?? 0), icon: TrendingUp, gradient: 'linear-gradient(135deg, #f59e0b, #92400e)', suffix: '' },
-    { label: 'مجموع دریافتی', value: formatAFN(stats?.totalReceived ?? 0), icon: DollarSign, gradient: 'linear-gradient(135deg, #10b981, #064e3b)', suffix: '' },
+    { label: 'مجموع موترها',    value: stats?.totalCars ?? 0,                    icon: Car,        gradient: 'linear-gradient(135deg,#f59e0b,#d97706)' },
+    { label: 'موترهای آزاد',   value: stats?.availableCars ?? 0,                icon: CheckCircle, gradient: 'linear-gradient(135deg,#10b981,#059669)' },
+    { label: 'موترهای کرایه',  value: stats?.rentedCars ?? 0,                   icon: Clock,       gradient: 'linear-gradient(135deg,#3b82f6,#2563eb)' },
+    { label: 'سفارش‌های فعال', value: stats?.activeContracts ?? 0,              icon: FileText,    gradient: 'linear-gradient(135deg,#8b5cf6,#7c3aed)' },
+    { label: 'سهم من (همه)',    value: formatCurrency(stats?.ownerShareTotal ?? 0),   icon: TrendingUp,  gradient: 'linear-gradient(135deg,#0d9488,#0f766e)' },
+    { label: 'مجموع کرایه‌ها', value: formatCurrency(stats?.totalContractValue ?? 0), icon: DollarSign, gradient: 'linear-gradient(135deg,#f59e0b,#92400e)' },
+    { label: 'مجموع دریافتی',  value: formatCurrency(stats?.totalReceived ?? 0),      icon: Hourglass,  gradient: 'linear-gradient(135deg,#0891b2,#0e7490)' },
   ];
 
   return (
@@ -86,10 +80,27 @@ export default function OwnerDashboardPage() {
         </div>
       </div>
 
+      {/* Owner earnings highlight */}
+      <div className="rounded-2xl overflow-hidden shadow-md" style={{ border: '2px solid #0d9488' }}>
+        <div className="flex items-center gap-3 px-5 py-4" style={{ background: 'linear-gradient(135deg,#0d9488,#0f766e)' }}>
+          <div className="w-11 h-11 rounded-xl flex items-center justify-center bg-white/20 shrink-0">
+            <TrendingUp className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <p className="font-bold text-white text-base">سهم من از همه سفارش‌ها</p>
+            <p className="text-teal-200 text-xs mt-0.5">محاسبه شده از ۵۰٪ کل کرایه</p>
+          </div>
+          <span className="mr-auto text-sm font-black text-white bg-white/25 px-3 py-1 rounded-full shrink-0">50%</span>
+        </div>
+        <div className="px-5 py-5" style={{ background: 'linear-gradient(135deg,#f0fdfa,#ccfbf1)' }}>
+          <p className="text-3xl font-black text-teal-900">{formatCurrency(stats?.ownerShareTotal ?? 0)}</p>
+        </div>
+      </div>
+
       {/* Stat cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
         {statCards.map((card, i) => (
-          <div key={i} className="rounded-2xl p-5 shadow-sm border border-amber-100 hover:shadow-md transition-shadow"
+          <div key={i} className="rounded-2xl p-4 shadow-sm border border-amber-100 hover:shadow-md transition-shadow"
             style={{ background: '#fff' }}>
             <div className="flex items-start justify-between mb-3">
               <div className="w-10 h-10 rounded-xl flex items-center justify-center"
@@ -97,7 +108,7 @@ export default function OwnerDashboardPage() {
                 <card.icon className="w-5 h-5 text-white" />
               </div>
             </div>
-            <p className="text-2xl font-bold text-amber-900 mb-1">{card.value}</p>
+            <p className="text-xl font-bold text-amber-900 mb-1">{card.value}</p>
             <p className="text-amber-600 text-xs">{card.label}</p>
           </div>
         ))}
@@ -135,10 +146,13 @@ export default function OwnerDashboardPage() {
                       <p className="text-amber-700 text-xs">{c.car?.carName} — {c.car?.plateNumber}</p>
                       <p className="text-amber-500 text-xs">{c.customer?.fullName}</p>
                     </div>
-                    <div className="text-left">
-                      <p className="text-amber-800 font-semibold text-sm">{formatAFN(c.totalRent)}</p>
+                    <div className="text-left space-y-0.5">
+                      <p className="text-amber-800 font-semibold text-sm">{formatCurrency(c.totalRent)}</p>
+                      {c.ownerShare > 0 && (
+                        <p className="text-teal-700 text-xs font-bold">سهم: {formatCurrency(c.ownerShare)}</p>
+                      )}
                       {c.remainingAmount > 0 && (
-                        <p className="text-red-500 text-xs">باقی: {formatAFN(c.remainingAmount)}</p>
+                        <p className="text-red-500 text-xs">باقی: {formatCurrency(c.remainingAmount)}</p>
                       )}
                     </div>
                   </div>

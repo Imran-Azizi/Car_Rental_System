@@ -3,9 +3,10 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import MainLayout from '@/components/layout/MainLayout';
 import { useApp } from '@/lib/context';
-import { contractsAPI } from '@/lib/api';
+import { ordersAPI } from '@/lib/api';
 import { TrendingUp, CreditCard, AlertCircle, CheckCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { formatAfghanDate, formatCurrency as fmtCur } from '@/lib/utils';
 
 export default function PaymentsPage() {
   const { t, token, lang } = useApp();
@@ -19,13 +20,13 @@ export default function PaymentsPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const res = await contractsAPI.getAll();
+      const res = await ordersAPI.getAll();
       setContracts(res.data.data);
     } catch { toast.error(t.error); } finally { setLoading(false); }
   };
 
-  const formatCurrency = (n: number) => `${(n || 0).toLocaleString()} ${t.currency}`;
-  const formatDate = (d: string) => d ? new Date(d).toLocaleDateString('fa-AF') : '-';
+  const formatCurrency = (n: number) => fmtCur(n, t.currency);
+  const formatDate = (d: string) => d ? formatAfghanDate(d) : '-';
 
   const allPayments = contracts.flatMap(c => (c.payments || []).map((p: any) => ({ ...p, contract: c })));
   const pending = contracts.filter(c => c.remainingAmount > 0 && c.status === 'ACTIVE');
@@ -135,7 +136,7 @@ export default function PaymentsPage() {
                           <td className="px-4 py-3 text-sm">{p.contract?.customer?.fullName}</td>
                           <td className="px-4 py-3 text-sm font-bold text-green-700">{formatCurrency(p.amount)}</td>
                           <td className="px-4 py-3 text-sm">{p.paymentMethod || '-'}</td>
-                          <td className="px-4 py-3 text-xs">{new Date(p.paymentDate).toLocaleDateString('fa-AF')}</td>
+                          <td className="px-4 py-3 text-xs">{formatAfghanDate(p.paymentDate)}</td>
                           <td className="px-4 py-3 text-xs text-amber-600">{p.notes || '-'}</td>
                         </tr>
                       ))}

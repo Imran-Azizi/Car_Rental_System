@@ -7,7 +7,7 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import StatCard from '@/components/ui/StatCard';
 import { useApp } from '@/lib/context';
 import { expensesAPI, carsAPI } from '@/lib/api';
-import { formatAfghanDate, numericInputHandler } from '@/lib/utils';
+import { formatAfghanDate, formatNumber, numericInputHandler } from '@/lib/utils';
 import {
   Plus, Search, Edit, Trash2, Wallet, Calendar,
   Printer, ChevronLeft, ChevronRight, SlidersHorizontal,
@@ -49,10 +49,6 @@ const emptyForm = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function fmt(n: number) {
-  return new Intl.NumberFormat('fa-AF').format(Math.round(n));
-}
-
 function todayISO() {
   return new Date().toISOString().split('T')[0];
 }
@@ -89,7 +85,7 @@ export default function ExpensesPage() {
   const [page, setPage]         = useState(1);
 
   // Debounce
-  const searchTimer = useRef<ReturnType<typeof setTimeout>>();
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => { if (!token) router.push('/'); }, [token]);
 
@@ -228,7 +224,7 @@ export default function ExpensesPage() {
         <td>${i + 1}</td>
         <td>${e.fromWhom}</td>
         <td>${e.toWhom}</td>
-        <td style="direction:ltr">${fmt(e.amount)} ؋</td>
+        <td style="direction:ltr">${formatNumber(e.amount)} ؋</td>
         <td>${formatAfghanDate(e.date)}</td>
         <td>${e.description || '—'}</td>
         <td>${e.car ? `${e.car.carName} (${e.car.plateNumber})` : '—'}</td>
@@ -253,10 +249,10 @@ export default function ExpensesPage() {
       <h2>گزارش مصارف روزانه — مرکز کرایه موتر افشار</h2>
       <p>تاریخ چاپ: ${formatAfghanDate(new Date().toISOString())}</p>
       ${stats ? `<div class="summary">
-        <div class="stat"><span>امروز</span><strong>${fmt(stats.today.amount)} ؋</strong></div>
-        <div class="stat"><span>این هفته</span><strong>${fmt(stats.week.amount)} ؋</strong></div>
-        <div class="stat"><span>این ماه</span><strong>${fmt(stats.month.amount)} ؋</strong></div>
-        <div class="stat"><span>مجموع</span><strong>${fmt(stats.total.amount)} ؋</strong></div>
+        <div class="stat"><span>امروز</span><strong>${formatNumber(stats.today.amount)} ؋</strong></div>
+        <div class="stat"><span>این هفته</span><strong>${formatNumber(stats.week.amount)} ؋</strong></div>
+        <div class="stat"><span>این ماه</span><strong>${formatNumber(stats.month.amount)} ؋</strong></div>
+        <div class="stat"><span>مجموع</span><strong>${formatNumber(stats.total.amount)} ؋</strong></div>
       </div>` : ''}
       <table>
         <thead><tr>
@@ -280,10 +276,10 @@ export default function ExpensesPage() {
   // ── Stat cards ─────────────────────────────────────────────────────────────
 
   const statCards = [
-    { title: t.todayExpenses,  value: statsLoading ? '...' : `${fmt(stats?.today.amount ?? 0)} ${t.currency}`,  icon: CalendarDays,  color: 'linear-gradient(135deg,#f59e0b,#d97706)',  sub: statsLoading ? '' : `${stats?.today.count ?? 0} ردیف` },
-    { title: t.weekExpenses,   value: statsLoading ? '...' : `${fmt(stats?.week.amount  ?? 0)} ${t.currency}`,  icon: BarChart3,     color: 'linear-gradient(135deg,#3b82f6,#2563eb)',  sub: statsLoading ? '' : `${stats?.week.count  ?? 0} ردیف` },
-    { title: t.monthExpenses,  value: statsLoading ? '...' : `${fmt(stats?.month.amount ?? 0)} ${t.currency}`,  icon: TrendingDown,  color: 'linear-gradient(135deg,#8b5cf6,#7c3aed)',  sub: statsLoading ? '' : `${stats?.month.count ?? 0} ردیف` },
-    { title: t.totalExpenses,  value: statsLoading ? '...' : `${fmt(stats?.total.amount ?? 0)} ${t.currency}`,  icon: Wallet,        color: 'linear-gradient(135deg,#10b981,#059669)',  sub: statsLoading ? '' : `${stats?.total.count ?? 0} ردیف` },
+    { title: t.todayExpenses,  value: statsLoading ? '...' : `${formatNumber(stats?.today.amount ?? 0)} ${t.currency}`,  icon: CalendarDays,  color: 'linear-gradient(135deg,#f59e0b,#d97706)',  sub: statsLoading ? '' : `${stats?.today.count ?? 0} ردیف` },
+    { title: t.weekExpenses,   value: statsLoading ? '...' : `${formatNumber(stats?.week.amount  ?? 0)} ${t.currency}`,  icon: BarChart3,     color: 'linear-gradient(135deg,#3b82f6,#2563eb)',  sub: statsLoading ? '' : `${stats?.week.count  ?? 0} ردیف` },
+    { title: t.monthExpenses,  value: statsLoading ? '...' : `${formatNumber(stats?.month.amount ?? 0)} ${t.currency}`,  icon: TrendingDown,  color: 'linear-gradient(135deg,#8b5cf6,#7c3aed)',  sub: statsLoading ? '' : `${stats?.month.count ?? 0} ردیف` },
+    { title: t.totalExpenses,  value: statsLoading ? '...' : `${formatNumber(stats?.total.amount ?? 0)} ${t.currency}`,  icon: Wallet,        color: 'linear-gradient(135deg,#10b981,#059669)',  sub: statsLoading ? '' : `${stats?.total.count ?? 0} ردیف` },
   ];
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -441,7 +437,7 @@ export default function ExpensesPage() {
                     <td className="px-4 py-3 text-sm text-amber-800 font-medium">{exp.toWhom}</td>
                     <td className="px-4 py-3">
                       <span className="font-bold text-sm text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg">
-                        {fmt(exp.amount)} {t.currency}
+                        {formatNumber(exp.amount)} {t.currency}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-sm text-amber-700">

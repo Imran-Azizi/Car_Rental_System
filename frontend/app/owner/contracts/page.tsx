@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { ownerPortalAPI } from '@/lib/api';
 import { FileText, Search, Filter, ChevronDown, ChevronUp, CreditCard } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { formatAfghanDate, formatCurrency } from '@/lib/utils';
 
 const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
   ACTIVE: { label: 'فعال', color: '#16a34a', bg: '#dcfce7' },
@@ -11,14 +12,6 @@ const statusConfig: Record<string, { label: string; color: string; bg: string }>
   CANCELLED: { label: 'لغو شده', color: '#dc2626', bg: '#fee2e2' },
   OVERDUE: { label: 'ناوقت', color: '#d97706', bg: '#fef3c7' },
 };
-
-function formatAFN(amount: number) {
-  return new Intl.NumberFormat('fa-AF').format(Math.round(amount)) + ' ؋';
-}
-
-function formatDate(d: string) {
-  return new Date(d).toLocaleDateString('fa-AF', { year: 'numeric', month: 'short', day: 'numeric' });
-}
 
 export default function OwnerContractsPage() {
   const router = useRouter();
@@ -123,14 +116,14 @@ export default function OwnerContractsPage() {
                       <span>مشتری: {c.customer?.fullName}</span>
                     </div>
                     <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-amber-500 mt-0.5">
-                      <span>{formatDate(c.startDate)} — {formatDate(c.endDate)}</span>
+                      <span>{formatAfghanDate(c.startDate)} — {formatAfghanDate(c.endDate)}</span>
                     </div>
                   </div>
 
                   <div className="text-left shrink-0">
-                    <p className="font-bold text-amber-900">{formatAFN(c.totalRent)}</p>
+                    <p className="font-bold text-amber-900">{formatCurrency(c.totalRent)}</p>
                     {c.remainingAmount > 0 ? (
-                      <p className="text-red-500 text-xs">باقی: {formatAFN(c.remainingAmount)}</p>
+                      <p className="text-red-500 text-xs">باقی: {formatCurrency(c.remainingAmount)}</p>
                     ) : (
                       <p className="text-green-600 text-xs">پرداخت کامل</p>
                     )}
@@ -149,15 +142,15 @@ export default function OwnerContractsPage() {
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-4 mb-4">
                       <div className="p-3 rounded-xl text-xs" style={{ background: '#fef9f0', border: '1px solid #fde68a' }}>
                         <p className="text-amber-500 mb-1">قیمت روزانه</p>
-                        <p className="font-bold text-amber-900">{formatAFN(c.rentPrice)}</p>
+                        <p className="font-bold text-amber-900">{formatCurrency(c.rentPrice)}</p>
                       </div>
                       <div className="p-3 rounded-xl text-xs" style={{ background: '#fef9f0', border: '1px solid #fde68a' }}>
                         <p className="text-amber-500 mb-1">پیش پرداخت</p>
-                        <p className="font-bold text-amber-900">{formatAFN(c.advancePayment)}</p>
+                        <p className="font-bold text-amber-900">{formatCurrency(c.advancePayment)}</p>
                       </div>
                       <div className="p-3 rounded-xl text-xs" style={{ background: '#fef9f0', border: '1px solid #fde68a' }}>
                         <p className="text-amber-500 mb-1">مجموع دریافت شده</p>
-                        <p className="font-bold text-green-700">{formatAFN(totalPaid)}</p>
+                        <p className="font-bold text-green-700">{formatCurrency(totalPaid)}</p>
                       </div>
                     </div>
 
@@ -171,8 +164,8 @@ export default function OwnerContractsPage() {
                           {c.payments.map((p: any) => (
                             <div key={p.id} className="flex items-center justify-between px-3 py-2 rounded-lg text-xs"
                               style={{ background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
-                              <span className="text-green-700 font-medium">{formatAFN(p.amount)}</span>
-                              <span className="text-green-600">{formatDate(p.paymentDate)}</span>
+                              <span className="text-green-700 font-medium">{formatCurrency(p.amount)}</span>
+                              <span className="text-green-600">{formatAfghanDate(p.paymentDate)}</span>
                               {p.paymentMethod && <span className="text-green-500">{p.paymentMethod}</span>}
                             </div>
                           ))}
