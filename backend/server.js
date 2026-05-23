@@ -46,10 +46,18 @@ const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:3000')
   .map(s => s.trim())
   .filter(Boolean);
 
+// Optional regex pattern for dynamic origins (e.g. Vercel preview deployments)
+// Set CORS_ORIGIN_PATTERN=https://.*\.vercel\.app in Railway env vars
+const corsPattern = process.env.CORS_ORIGIN_PATTERN
+  ? new RegExp(process.env.CORS_ORIGIN_PATTERN)
+  : null;
+
 app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (mobile apps, Postman, Railway health checks)
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    if (corsPattern && corsPattern.test(origin)) return callback(null, true);
     callback(new Error(`CORS: origin not allowed — ${origin}`));
   },
   credentials: true,
