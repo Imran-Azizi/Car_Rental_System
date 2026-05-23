@@ -120,7 +120,7 @@ export default function OwnerContractsPage() {
                     </div>
                   </div>
 
-                  <div className="text-left shrink-0">
+                  <div className="text-right shrink-0">
                     <p className="font-bold text-amber-900">{formatCurrency(c.totalRent)}</p>
                     {c.remainingAmount > 0 ? (
                       <p className="text-red-500 text-xs">باقی: {formatCurrency(c.remainingAmount)}</p>

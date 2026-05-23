@@ -1,6 +1,7 @@
 import prisma from '../utils/prisma.js';
 import { sendSuccess, sendError } from '../utils/response.js';
 import { generateContractNumber } from '../utils/generateContractNumber.js';
+import { deleteUploadedFiles } from '../utils/fileUtils.js';
 
 // Profit-sharing ratio — owner gets 50%, admin keeps 50%
 const OWNER_SHARE_PCT = parseFloat(process.env.OWNER_SHARE_PCT || '0.50');
@@ -67,7 +68,20 @@ export const createContract = async (req, res) => {
     const tazkiraDocPhoto = fileUrl(req.files, 'tazkiraDocPhoto');
 
     const data = {
-      ...req.body,
+      carId:              req.body.carId,
+      customerId:         req.body.customerId,
+      ...(req.body.guarantorId && { guarantorId: req.body.guarantorId }),
+      startDate:          new Date(req.body.startDate),
+      startTime:          req.body.startTime || '00:00',
+      endDate:            new Date(req.body.endDate),
+      endTime:            req.body.endTime   || '00:00',
+      rentPrice,
+      totalRent,
+      advancePayment:     advance,
+      remainingAmount:    isNaN(remaining) ? Math.max(0, totalRent - advance) : remaining,
+      carStatus:          req.body.carStatus  || null,
+      agreementConfirmed: req.body.agreementConfirmed === true || req.body.agreementConfirmed === 'true',
+      notes:              req.body.notes || null,
       contractNumber,
       ownerShare,
       adminShare,
@@ -84,9 +98,9 @@ export const createContract = async (req, res) => {
     await prisma.car.update({ where: { id: data.carId }, data: { status: 'RENTED' } });
 
     // Record advance payment
-    if (parseFloat(data.advancePayment) > 0) {
+    if (advance > 0) {
       await prisma.payment.create({
-        data: { contractId: contract.id, amount: parseFloat(data.advancePayment), notes: 'پیش پرداخت' },
+        data: { contractId: contract.id, amount: advance, notes: 'پیش پرداخت' },
       });
     }
 
@@ -97,6 +111,16 @@ export const createContract = async (req, res) => {
 export const updateContract = async (req, res) => {
   try {
     const updateData = { ...req.body };
+
+    // Coerce string values from multipart/JSON body to the correct Prisma types
+    ['rentPrice', 'totalRent', 'advancePayment', 'remainingAmount', 'ownerShare', 'adminShare'].forEach(f => {
+      if (updateData[f] !== undefined) updateData[f] = parseFloat(updateData[f]) || 0;
+    });
+    if (updateData.agreementConfirmed !== undefined) {
+      updateData.agreementConfirmed = updateData.agreementConfirmed === true || updateData.agreementConfirmed === 'true';
+    }
+    if (updateData.startDate) updateData.startDate = new Date(updateData.startDate);
+    if (updateData.endDate)   updateData.endDate   = new Date(updateData.endDate);
 
     // Recalculate shares if totalRent changed
     if (updateData.totalRent !== undefined) {
@@ -111,16 +135,23 @@ export const updateContract = async (req, res) => {
     if (billDocPhoto)    updateData.billDocPhoto    = billDocPhoto;
     if (tazkiraDocPhoto) updateData.tazkiraDocPhoto = tazkiraDocPhoto;
 
-    // If advancePayment is updated, recalculate remainingAmount
+    // Fetch existing contract once for car-swap and advance recalc
+    const existing = await prisma.rentalContract.findUnique({
+      where: { id: req.params.id },
+      select: { carId: true, totalRent: true },
+    });
+    if (!existing) return sendError(res, 'سفارش یافت نشد', 404);
+
+    // Swap car status when carId changes
+    if (updateData.carId && updateData.carId !== existing.carId) {
+      await prisma.car.update({ where: { id: existing.carId },       data: { status: 'AVAILABLE' } }).catch(() => {});
+      await prisma.car.update({ where: { id: updateData.carId },     data: { status: 'RENTED'    } }).catch(() => {});
+    }
+
+    // Recalculate remainingAmount if advancePayment changes without a new totalRent
     if (updateData.advancePayment !== undefined && updateData.totalRent === undefined) {
-      const existing = await prisma.rentalContract.findUnique({
-        where: { id: req.params.id },
-        select: { totalRent: true },
-      });
-      if (existing) {
-        const advance = parseFloat(updateData.advancePayment) || 0;
-        updateData.remainingAmount = Math.max(0, existing.totalRent - advance);
-      }
+      const advance = parseFloat(String(updateData.advancePayment)) || 0;
+      updateData.remainingAmount = Math.max(0, existing.totalRent - advance);
     }
 
     const contract = await prisma.rentalContract.update({
@@ -168,11 +199,27 @@ export const addPayment = async (req, res) => {
 export const deleteContract = async (req, res) => {
   try {
     const contract = await prisma.rentalContract.findUnique({ where: { id: req.params.id } });
+    if (!contract) return sendError(res, 'سفارش یافت نشد', 404);
+
     await prisma.payment.deleteMany({ where: { contractId: req.params.id } });
     await prisma.rentalContract.delete({ where: { id: req.params.id } });
-    if (contract) {
-      await prisma.car.update({ where: { id: contract.carId }, data: { status: 'AVAILABLE' } }).catch(() => {});
+
+    // Delete contract document files
+    deleteUploadedFiles(contract.billDocPhoto, contract.tazkiraDocPhoto);
+
+    // Restore car to available
+    await prisma.car.update({ where: { id: contract.carId }, data: { status: 'AVAILABLE' } }).catch(() => {});
+
+    // Delete customer only if they have no other contracts
+    const remainingContracts = await prisma.rentalContract.count({
+      where: { customerId: contract.customerId },
+    });
+    if (remainingContracts === 0) {
+      const customer = await prisma.customer.findUnique({ where: { id: contract.customerId }, select: { photo: true } }).catch(() => null);
+      await prisma.customer.delete({ where: { id: contract.customerId } }).catch(() => {});
+      if (customer?.photo) deleteUploadedFiles(customer.photo);
     }
+
     sendSuccess(res, null, 'سفارش موفقانه حذف شد');
   } catch (err) { sendError(res, err.message); }
 };

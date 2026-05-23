@@ -30,6 +30,7 @@ model CarOwner {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   cars          Car[]
+  notifications OwnerNotification[]
 
   @@index([fullName])
   @@index([phoneNumber])
@@ -173,6 +174,8 @@ model Expense {
   fromWhom    String
   toWhom      String
   amount      Float
+  adminShare  Float    @default(0)
+  ownerShare  Float    @default(0)
   date        DateTime
   description String?
   carId       String?
@@ -183,6 +186,24 @@ model Expense {
 
   @@index([date])
   @@index([carId])
+  @@index([createdAt])
+}
+
+model OwnerNotification {
+  id         String   @id @default(cuid())
+  ownerId    String
+  title      String
+  message    String
+  type       String   @default("EXPENSE")
+  isRead     Boolean  @default(false)
+  carId      String?
+  expenseId  String?
+  amount     Float?
+  createdAt  DateTime @default(now())
+  owner      CarOwner @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+  @@index([ownerId, isRead])
   @@index([createdAt])
 }
 

@@ -7,7 +7,7 @@ import { useApp } from '@/lib/context';
 import { dashboardAPI } from '@/lib/api';
 import {
   Car, Users, FileText, CheckCircle, Clock,
-  TrendingUp, ChevronLeft,
+  TrendingUp, TrendingDown, ChevronLeft,
   ListOrdered, Wallet, BadgeCheck, Hourglass,
   UserCheck, ShieldCheck,
 } from 'lucide-react';
@@ -58,6 +58,13 @@ export default function DashboardPage() {
             <div className="skeleton h-8 w-48 rounded mb-2" />
             <div className="skeleton h-4 w-32 rounded" />
           </div>
+          {/* Revenue split + financial summary */}
+          <div className="grid grid-cols-2 gap-4">
+            {Array.from({ length: 2 }).map((_, i) => <SkeletonCard key={i} />)}
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            {Array.from({ length: 2 }).map((_, i) => <SkeletonCard key={i} />)}
+          </div>
           {/* Top 4 money cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}
@@ -84,37 +91,57 @@ export default function DashboardPage() {
           <p className="text-amber-600 text-sm mt-1">{t.appName}</p>
         </div>
 
-        {/* ── Revenue split — TOP PRIORITY ──────────────────────── */}
+        {/* ── Row 1: درآمد خالص (left) + کسر مصارف (right) ─────── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {/* Owner share */}
-          <div className="rounded-2xl overflow-hidden shadow-md" style={{ border: '2px solid #0d9488' }}>
-            <div className="flex items-center gap-3 px-5 py-4" style={{ background: 'linear-gradient(135deg,#0d9488,#0f766e)' }}>
+          {/* Net income — left */}
+          <div className="rounded-2xl overflow-hidden shadow-md" style={{ border: '2px solid #6ee7b7' }}>
+            <div className="flex items-center gap-3 px-5 py-4" style={{ background: 'linear-gradient(135deg,#059669,#047857)' }}>
               <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-white/20 shrink-0">
-                <UserCheck className="w-5 h-5 text-white" />
+                <Wallet className="w-5 h-5 text-white" />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-bold text-white text-base leading-tight">
-                  {lang === 'dari' ? 'سهم صاحب موتر' : 'د موتر د خاوند برخه'}
+                  {lang === 'dari' ? 'درآمد خالص' : 'خالص عاید'}
                 </p>
-                <p className="text-teal-200 text-xs mt-0.5">
-                  {lang === 'dari' ? 'از همه سفارش‌ها' : 'له ټولو سفارشونو'}
+                <p className="text-emerald-200 text-xs mt-0.5">
+                  {lang === 'dari' ? 'بعد از کسر مصارف' : 'د لګښتونو وروسته'}
+                </p>
+              </div>
+            </div>
+            <div className="px-5 py-5" style={{ background: 'linear-gradient(135deg,#f0fdf4,#dcfce7)' }}>
+              <p className={`text-3xl font-black ${(stats?.adminNetIncome ?? 0) >= 0 ? 'text-emerald-900' : 'text-red-700'}`}>
+                {formatCurrency(stats?.adminNetIncome ?? 0)}
+              </p>
+            </div>
+          </div>
+
+          {/* Expense deductions — right */}
+          <div className="rounded-2xl overflow-hidden shadow-md" style={{ border: '2px solid #fca5a5' }}>
+            <div className="flex items-center gap-3 px-5 py-4" style={{ background: 'linear-gradient(135deg,#ef4444,#dc2626)' }}>
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-white/20 shrink-0">
+                <TrendingDown className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-white text-base leading-tight">
+                  {lang === 'dari' ? 'کسر مصارف' : 'د لګښت کسر'}
+                </p>
+                <p className="text-red-200 text-xs mt-0.5">
+                  {lang === 'dari' ? 'سهم ادمین از مصارف' : 'د ادمین د لګښتونو برخه'}
                 </p>
               </div>
               <span className="text-sm font-black text-white bg-white/25 px-3 py-1 rounded-full shrink-0">50%</span>
             </div>
-            <div className="px-5 py-5" style={{ background: 'linear-gradient(135deg,#f0fdfa,#ccfbf1)' }}>
-              <p className="text-3xl font-black" style={{ color: '#0f766e' }}>
-                {formatCurrency(stats?.ownerIncome ?? 0)}
+            <div className="px-5 py-5" style={{ background: 'linear-gradient(135deg,#fff5f5,#fee2e2)' }}>
+              <p className="text-3xl font-black text-red-800">
+                {formatCurrency(stats?.adminExpenses ?? 0)}
               </p>
-              {(stats?.ownerIncomeCompleted ?? 0) > 0 && (
-                <p className="text-xs mt-2 font-medium" style={{ color: '#047857' }}>
-                  {lang === 'dari' ? 'تکمیل‌شده:' : 'بشپړ:'} {formatCurrency(stats?.ownerIncomeCompleted ?? 0)}
-                </p>
-              )}
             </div>
           </div>
+        </div>
 
-          {/* Admin share */}
+        {/* ── Row 2: سهم ادمین (left) + سهم صاحب موتر (right) ── */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Admin share — left */}
           <div className="rounded-2xl overflow-hidden shadow-md" style={{ border: '2px solid #7c3aed' }}>
             <div className="flex items-center gap-3 px-5 py-4" style={{ background: 'linear-gradient(135deg,#7c3aed,#5b21b6)' }}>
               <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-white/20 shrink-0">
@@ -137,6 +164,34 @@ export default function DashboardPage() {
               {(stats?.adminIncomeCompleted ?? 0) > 0 && (
                 <p className="text-xs mt-2 font-medium" style={{ color: '#4c1d95' }}>
                   {lang === 'dari' ? 'تکمیل‌شده:' : 'بشپړ:'} {formatCurrency(stats?.adminIncomeCompleted ?? 0)}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Owner share — right */}
+          <div className="rounded-2xl overflow-hidden shadow-md" style={{ border: '2px solid #0d9488' }}>
+            <div className="flex items-center gap-3 px-5 py-4" style={{ background: 'linear-gradient(135deg,#0d9488,#0f766e)' }}>
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-white/20 shrink-0">
+                <UserCheck className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-white text-base leading-tight">
+                  {lang === 'dari' ? 'سهم صاحب موتر' : 'د موتر د خاوند برخه'}
+                </p>
+                <p className="text-teal-200 text-xs mt-0.5">
+                  {lang === 'dari' ? 'از همه سفارش‌ها' : 'له ټولو سفارشونو'}
+                </p>
+              </div>
+              <span className="text-sm font-black text-white bg-white/25 px-3 py-1 rounded-full shrink-0">50%</span>
+            </div>
+            <div className="px-5 py-5" style={{ background: 'linear-gradient(135deg,#f0fdfa,#ccfbf1)' }}>
+              <p className="text-3xl font-black" style={{ color: '#0f766e' }}>
+                {formatCurrency(stats?.ownerIncome ?? 0)}
+              </p>
+              {(stats?.ownerIncomeCompleted ?? 0) > 0 && (
+                <p className="text-xs mt-2 font-medium" style={{ color: '#047857' }}>
+                  {lang === 'dari' ? 'تکمیل‌شده:' : 'بشپړ:'} {formatCurrency(stats?.ownerIncomeCompleted ?? 0)}
                 </p>
               )}
             </div>
@@ -253,7 +308,7 @@ export default function DashboardPage() {
                             <p className="font-medium text-amber-900 text-sm truncate">{c.customer?.fullName}</p>
                             <p className="text-xs text-amber-500">{c.car?.carName} — {c.car?.plateNumber}</p>
                           </div>
-                          <div className="text-left shrink-0">
+                          <div className="text-right shrink-0">
                             <p className="text-xs text-amber-500">{t.remainingAmount}</p>
                             <p className="text-base font-bold text-red-600 whitespace-nowrap">
                               {formatCurrency(c.remainingAmount)}

@@ -108,7 +108,7 @@ function ImageGallery({ carId, images, onChanged }: { carId: string; images: any
           {/* Delete current */}
           <button
             onClick={() => handleDelete(images[activeIdx].id)}
-            className="absolute top-2 left-2 w-7 h-7 rounded-full bg-red-500 text-white flex items-center justify-center hover:bg-red-600 shadow"
+            className="absolute top-2 right-2 w-7 h-7 rounded-full bg-red-500 text-white flex items-center justify-center hover:bg-red-600 shadow"
           >
             <X className="w-3.5 h-3.5" />
           </button>

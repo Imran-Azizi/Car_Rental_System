@@ -142,9 +142,13 @@ export const ownerAuthAPI = {
 };
 
 export const ownerPortalAPI = {
-  getDashboard: () => ownerApi.get('/owner-portal/dashboard'),
-  getCars: (params?: any) => ownerApi.get('/owner-portal/cars', { params }),
-  getContracts: (params?: any) => ownerApi.get('/owner-portal/contracts', { params }),
+  getDashboard:              ()                 => ownerApi.get('/owner-portal/dashboard'),
+  getCars:                   (params?: any)     => ownerApi.get('/owner-portal/cars', { params }),
+  getContracts:              (params?: any)     => ownerApi.get('/owner-portal/contracts', { params }),
+  getNotifications:          (params?: any)     => ownerApi.get('/owner-portal/notifications', { params }),
+  getUnreadCount:            ()                 => ownerApi.get('/owner-portal/notifications/unread-count'),
+  markNotificationRead:      (id: string)       => ownerApi.patch(`/owner-portal/notifications/${id}/read`),
+  markAllNotificationsRead:  ()                 => ownerApi.patch('/owner-portal/notifications/read-all'),
 };
 
 export const draftsAPI = {

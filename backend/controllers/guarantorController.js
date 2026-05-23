@@ -1,5 +1,6 @@
 import prisma from '../utils/prisma.js';
 import { sendSuccess, sendError } from '../utils/response.js';
+import { deleteUploadedFile } from '../utils/fileUtils.js';
 
 const pick = (body, photoUrl) => {
   const { fullName, fatherName, grandfatherName, tazkiraNumber, province, district, village, currentAddress, permanentAddress, phoneNumber, relationship, notes } = body;
@@ -20,6 +21,14 @@ export const getGuarantors = async (req, res) => {
   } catch (err) { sendError(res, err.message); }
 };
 
+export const getGuarantorById = async (req, res) => {
+  try {
+    const g = await prisma.guarantor.findUnique({ where: { id: req.params.id } });
+    if (!g) return sendError(res, 'ضامن یافت نشد', 404);
+    sendSuccess(res, g);
+  } catch (err) { sendError(res, err.message); }
+};
+
 export const createGuarantor = async (req, res) => {
   try {
     const photoUrl = req.file ? `/uploads/guarantors/${req.file.filename}` : undefined;
@@ -30,7 +39,12 @@ export const createGuarantor = async (req, res) => {
 
 export const updateGuarantor = async (req, res) => {
   try {
-    const photoUrl = req.file ? `/uploads/guarantors/${req.file.filename}` : undefined;
+    let photoUrl;
+    if (req.file) {
+      const existing = await prisma.guarantor.findUnique({ where: { id: req.params.id }, select: { photo: true } });
+      if (existing?.photo) deleteUploadedFile(existing.photo);
+      photoUrl = `/uploads/guarantors/${req.file.filename}`;
+    }
     const guarantor = await prisma.guarantor.update({ where: { id: req.params.id }, data: pick(req.body, photoUrl) });
     sendSuccess(res, guarantor, 'ضامن موفقانه بروز شد');
   } catch (err) { sendError(res, err.message); }
@@ -38,15 +52,10 @@ export const updateGuarantor = async (req, res) => {
 
 export const deleteGuarantor = async (req, res) => {
   try {
+    const existing = await prisma.guarantor.findUnique({ where: { id: req.params.id }, select: { photo: true } });
+    if (!existing) return sendError(res, 'ضامن یافت نشد', 404);
     await prisma.guarantor.delete({ where: { id: req.params.id } });
+    deleteUploadedFile(existing.photo);
     sendSuccess(res, null, 'ضامن موفقانه حذف شد');
-  } catch (err) { sendError(res, err.message); }
-};
-
-export const getGuarantorById = async (req, res) => {
-  try {
-    const g = await prisma.guarantor.findUnique({ where: { id: req.params.id } });
-    if (!g) return sendError(res, 'ضامن یافت نشد', 404);
-    sendSuccess(res, g);
   } catch (err) { sendError(res, err.message); }
 };

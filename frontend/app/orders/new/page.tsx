@@ -6,7 +6,7 @@ import { useApp } from '@/lib/context';
 import { carsAPI, customersAPI, guarantorsAPI, ordersAPI, draftsAPI } from '@/lib/api';
 import { parseNum, numericInputHandler, formatNumber } from '@/lib/utils';
 import {
-  Car, User, Shield, Receipt, FileImage,
+  Car, User, Shield, Receipt, FileImage, Pencil,
   Check, ChevronLeft, ChevronRight,
   Search, X, AlertCircle, CheckCircle2, Camera, Upload,
 } from 'lucide-react';
@@ -91,7 +91,7 @@ function DocSlot({ label, sublabel, preview, onFile, onClear, color = '#f59e0b' 
             <button
               type="button"
               onClick={e => { e.stopPropagation(); onClear(); }}
-              className="absolute top-1.5 left-1.5 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center shadow"
+              className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center shadow"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -176,10 +176,18 @@ export default function OrderNewPage() {
 
   /* ── Draft system ── */
   const [draftId, setDraftId]           = useState<string | null>(null);
+  const [draftEnabled, setDraftEnabled] = useState(false);
   const [draftSaving, setDraftSaving]   = useState(false);
   const [draftSavedAt, setDraftSavedAt] = useState<Date | null>(null);
   const [showDraftBanner, setShowDraftBanner] = useState(false);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const skipNextDailyRateSync = useRef(false);
+
+  /* ── Edit mode ── */
+  const [isEditMode, setIsEditMode]                   = useState(false);
+  const [editId, setEditId]                           = useState<string | null>(null);
+  const [existingCustomerId, setExistingCustomerId]   = useState<string | null>(null);
+  const [existingGuarantorId, setExistingGuarantorId] = useState<string | null>(null);
 
   useEffect(() => { if (!token) router.push('/'); }, [token]);
 
@@ -205,7 +213,7 @@ export default function OrderNewPage() {
   });
 
   const saveDraft = async (silent = true) => {
-    if (!token) return;
+    if (!token || !draftEnabled || isEditMode) return;
     setDraftSaving(true);
     try {
       const payload = getDraftPayload();
@@ -221,13 +229,13 @@ export default function OrderNewPage() {
     finally { setDraftSaving(false); }
   };
 
-  /* ─── Auto-save every 3s of inactivity ─── */
+  /* ─── Auto-save every 3s of inactivity (only after first step is completed) ─── */
   useEffect(() => {
-    if (!token) return;
+    if (!token || !draftEnabled) return;
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(() => saveDraft(true), 3000);
     return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
-  }, [step, selectedCarId, customer, guarantor, dailyRentInput, receivedAmount, token]);
+  }, [step, selectedCarId, customer, guarantor, dailyRentInput, receivedAmount, token, draftEnabled]);
 
   /* ─── Load draft from URL param ─── */
   useEffect(() => {
@@ -246,7 +254,63 @@ export default function OrderNewPage() {
       if (fd.dailyRentInput) setDailyRentInput(fd.dailyRentInput);
       if (fd.receivedAmount) setReceivedAmount(fd.receivedAmount);
       setShowDraftBanner(true);
+      setDraftEnabled(true);
     }).catch(() => {});
+  }, [token]);
+
+  /* ─── Edit-mode: load existing order and prefill all fields ─── */
+  useEffect(() => {
+    if (!token) return;
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('edit');
+    if (!id) return;
+    setIsEditMode(true);
+    setEditId(id);
+    const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api').replace('/api', '');
+    ordersAPI.getById(id).then(res => {
+      const c = res.data.data;
+      skipNextDailyRateSync.current = true;
+      setSelectedCarId(c.carId);
+      setExistingCustomerId(c.customerId);
+      setCustomer({
+        fullName:       c.customer?.fullName       || '',
+        fatherName:     c.customer?.fatherName     || '',
+        tazkiraNumber:  c.customer?.tazkiraNumber  || '',
+        phoneNumber:    c.customer?.phoneNumber    || '',
+        altPhone:       c.customer?.altPhone       || '',
+        province:       c.customer?.province       || '',
+        district:       c.customer?.district       || '',
+        village:        c.customer?.village        || '',
+        currentAddress: c.customer?.currentAddress || '',
+        occupation:     c.customer?.occupation     || '',
+        notes:          c.notes                    || '',
+        startDate:      c.startDate ? c.startDate.split('T')[0] : '',
+        startTime:      c.startTime || '',
+        endDate:        c.endDate   ? c.endDate.split('T')[0]   : '',
+        endTime:        c.endTime   || '',
+      });
+      if (c.guarantor) {
+        setExistingGuarantorId(c.guarantorId);
+        setGuarantor({
+          fullName:       c.guarantor.fullName       || '',
+          fatherName:     c.guarantor.fatherName     || '',
+          tazkiraNumber:  c.guarantor.tazkiraNumber  || '',
+          phoneNumber:    c.guarantor.phoneNumber    || '',
+          province:       c.guarantor.province       || '',
+          district:       c.guarantor.district       || '',
+          currentAddress: c.guarantor.currentAddress || '',
+          relationship:   c.guarantor.relationship   || '',
+          notes:          c.guarantor.notes          || '',
+        });
+      }
+      setDailyRentInput(String(c.rentPrice   || ''));
+      setReceivedAmount(String(c.advancePayment || ''));
+      const imgUrl = (p: string | null) => p ? `${API_BASE}${p}` : null;
+      const cp = imgUrl(c.customer?.photo);   if (cp) setCustomerPhotoPreview(cp);
+      const gp = imgUrl(c.guarantor?.photo);  if (gp) setGuarantorPhotoPreview(gp);
+      const bp = imgUrl(c.billDocPhoto);      if (bp) setBillDocPhotoPreview(bp);
+      const tp = imgUrl(c.tazkiraDocPhoto);   if (tp) setTazkiraDocPhotoPreview(tp);
+    }).catch(() => toast.error(lang === 'dari' ? 'خطا در بارگذاری سفارش' : 'د سفارش بارولو کې تیروتنه'));
   }, [token]);
 
   /* ─── Warn on page leave if form has data ─── */
@@ -265,6 +329,7 @@ export default function OrderNewPage() {
   const selectedCar = useMemo(() => cars.find(c => c.id === selectedCarId), [cars, selectedCarId]);
 
   useEffect(() => {
+    if (skipNextDailyRateSync.current) { skipNextDailyRateSync.current = false; return; }
     if (selectedCar) setDailyRentInput(String(selectedCar.dailyRate));
   }, [selectedCarId]);           // reset whenever car selection changes
 
@@ -460,6 +525,84 @@ export default function OrderNewPage() {
     }
   };
 
+  /* ─── Edit submit ─── */
+  const handleEditSubmit = async () => {
+    setSaving(true);
+    try {
+      /* 1 — Update customer */
+      const custData: Record<string, string> = {
+        fullName: customer.fullName, fatherName: customer.fatherName,
+        tazkiraNumber: customer.tazkiraNumber, phoneNumber: customer.phoneNumber,
+        province: customer.province, district: customer.district,
+        village: customer.village, currentAddress: customer.currentAddress,
+        occupation: customer.occupation, notes: customer.notes,
+      };
+      if (customerPhoto) {
+        const fd = new FormData();
+        Object.entries(custData).forEach(([k, v]) => v && fd.append(k, v));
+        fd.append('photo', customerPhoto);
+        await customersAPI.update(existingCustomerId!, fd);
+      } else {
+        await customersAPI.update(existingCustomerId!, custData);
+      }
+
+      /* 2 — Update / create guarantor */
+      let finalGuarantorId: string | undefined = existingGuarantorId || undefined;
+      if (guarantor.fullName.trim()) {
+        const guarData: Record<string, string> = {
+          fullName: guarantor.fullName, fatherName: guarantor.fatherName,
+          tazkiraNumber: guarantor.tazkiraNumber, phoneNumber: guarantor.phoneNumber,
+          province: guarantor.province, district: guarantor.district,
+          currentAddress: guarantor.currentAddress, relationship: guarantor.relationship,
+          notes: guarantor.notes,
+        };
+        if (finalGuarantorId) {
+          if (guarantorPhoto) {
+            const fd = new FormData();
+            Object.entries(guarData).forEach(([k, v]) => v && fd.append(k, v));
+            fd.append('photo', guarantorPhoto);
+            await guarantorsAPI.update(finalGuarantorId, fd);
+          } else {
+            await guarantorsAPI.update(finalGuarantorId, guarData);
+          }
+        } else {
+          const guarRes = guarantorPhoto
+            ? (() => { const fd = new FormData(); Object.entries(guarData).forEach(([k, v]) => v && fd.append(k, v)); fd.append('photo', guarantorPhoto); return guarantorsAPI.create(fd); })()
+            : guarantorsAPI.create(guarData);
+          finalGuarantorId = (await guarRes).data.data.id;
+        }
+      }
+
+      /* 3 — Update contract */
+      const advance = received;
+      const contractBase: Record<string, any> = {
+        carId: selectedCarId,
+        startDate: new Date(customer.startDate).toISOString(), startTime: customer.startTime || '00:00',
+        endDate:   new Date(customer.endDate).toISOString(),   endTime:   customer.endTime   || '00:00',
+        rentPrice: dailyRent, totalRent, advancePayment: advance, remainingAmount: remaining,
+        carStatus: 'خوب', agreementConfirmed: true, notes: customer.notes,
+        ...(finalGuarantorId && { guarantorId: finalGuarantorId }),
+      };
+      const hasDocs = billDocPhoto || tazkiraDocPhoto;
+      if (hasDocs) {
+        const fd = new FormData();
+        Object.entries(contractBase).forEach(([k, v]) => fd.append(k, String(v)));
+        if (billDocPhoto)    fd.append('billDocPhoto',    billDocPhoto);
+        if (tazkiraDocPhoto) fd.append('tazkiraDocPhoto', tazkiraDocPhoto);
+        await ordersAPI.update(editId!, fd);
+      } else {
+        await ordersAPI.update(editId!, contractBase);
+      }
+
+      toast.success(lang === 'dari' ? 'سفارش موفقانه ویرایش شد!' : 'سفارش بریالیتوب سره سم شو!');
+      router.push('/orders');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || t.error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   /* ─── Step definitions ─── */
   const steps = [
     { label: lang === 'dari' ? 'انتخاب موتر'    : 'موتر غوره کول',       icon: Car },
@@ -476,8 +619,20 @@ export default function OrderNewPage() {
     <MainLayout>
       <div className="max-w-5xl mx-auto space-y-5 pb-10">
 
+        {/* Edit mode banner */}
+        {isEditMode && (
+          <div className="flex items-center gap-3 p-3 rounded-xl bg-orange-50 border border-orange-200">
+            <Pencil className="w-4 h-4 text-orange-600 shrink-0" />
+            <p className="text-sm font-semibold text-orange-800">
+              {lang === 'dari'
+                ? 'حالت ویرایش — تغییرات شما جایگزین اطلاعات قبلی خواهد شد'
+                : 'د سمولو حالت — ستاسو بدلونونه به د مخکنیو معلوماتو ځای ونیسي'}
+            </p>
+          </div>
+        )}
+
         {/* Draft restored banner */}
-        {showDraftBanner && (
+        {showDraftBanner && !isEditMode && (
           <div className="flex items-center justify-between p-3 rounded-xl bg-blue-50 border border-blue-200 text-sm">
             <div className="flex items-center gap-2 text-blue-800">
               <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
@@ -491,39 +646,45 @@ export default function OrderNewPage() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold text-amber-900">
-              {lang === 'dari' ? 'سفارش موتر جدید' : 'نوی د موتر امر'}
+              {isEditMode
+                ? (lang === 'dari' ? 'ویرایش سفارش' : 'د سفارش سمول')
+                : (lang === 'dari' ? 'سفارش موتر جدید' : 'نوی د موتر امر')}
             </h2>
             <div className="flex items-center gap-3 mt-0.5">
               <p className="text-sm text-amber-600">
                 {lang === 'dari' ? 'تمام مراحل را تکمیل کنید' : 'ټول مرحلې بشپړ کړئ'}
               </p>
-              {/* Draft status */}
-              {draftSaving ? (
-                <span className="flex items-center gap-1 text-xs text-amber-500">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                  {lang === 'dari' ? 'در حال ذخیره...' : 'ذخیره کیږي...'}
-                </span>
-              ) : draftSavedAt ? (
-                <span className="flex items-center gap-1 text-xs text-green-600">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                  {lang === 'dari' ? 'پیش‌نویس ذخیره شد' : 'مسوده خوندي شوه'}
-                </span>
-              ) : null}
+              {/* Draft status — only shown after first step is completed, not in edit mode */}
+              {draftEnabled && !isEditMode && (
+                draftSaving ? (
+                  <span className="flex items-center gap-1 text-xs text-amber-500">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                    {lang === 'dari' ? 'در حال ذخیره...' : 'ذخیره کیږي...'}
+                  </span>
+                ) : draftSavedAt ? (
+                  <span className="flex items-center gap-1 text-xs text-green-600">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                    {lang === 'dari' ? 'پیش‌نویس ذخیره شد' : 'مسوده خوندي شوه'}
+                  </span>
+                ) : null
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => saveDraft(false)}
-              disabled={draftSaving}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border border-amber-300 text-amber-700 hover:bg-amber-50 transition-colors disabled:opacity-50"
-            >
-              {draftSaving ? (
-                <span className="w-3.5 h-3.5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <span>💾</span>
-              )}
-              {lang === 'dari' ? 'ذخیره پیش‌نویس' : 'مسوده ذخیره'}
-            </button>
+            {draftEnabled && !isEditMode && (
+              <button
+                onClick={() => saveDraft(false)}
+                disabled={draftSaving}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border border-amber-300 text-amber-700 hover:bg-amber-50 transition-colors disabled:opacity-50"
+              >
+                {draftSaving ? (
+                  <span className="w-3.5 h-3.5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <span>💾</span>
+                )}
+                {lang === 'dari' ? 'ذخیره پیش‌نویس' : 'مسوده ذخیره'}
+              </button>
+            )}
             <button onClick={() => router.push('/orders')} className="btn-secondary px-4 py-2 rounded-xl text-sm">
               {t.back}
             </button>
@@ -614,7 +775,7 @@ export default function OrderNewPage() {
                         className={`relative text-right rounded-xl border-2 p-4 transition-all shadow-sm hover:shadow-md
                           ${sel ? 'border-amber-500 bg-amber-50 shadow-amber-200' : 'border-amber-100 bg-white hover:border-amber-300'}`}>
                         {sel && (
-                          <span className="absolute top-2 left-2 w-6 h-6 rounded-full flex items-center justify-center text-white shadow"
+                          <span className="absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center text-white shadow"
                             style={{ background: 'linear-gradient(135deg,#f59e0b,#d97706)' }}>
                             <Check className="w-3.5 h-3.5" />
                           </span>
@@ -1042,6 +1203,7 @@ export default function OrderNewPage() {
                   if (step === 0 && !validateStep0()) return;
                   if (step === 1 && !validateStep1()) return;
                   if (step === 3 && !validateStep3()) return;
+                  setDraftEnabled(true);
                   goStep(step + 1);
                 }}
                 className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-white font-semibold shadow-lg hover:shadow-xl transition-all active:scale-95"
@@ -1051,13 +1213,15 @@ export default function OrderNewPage() {
               </button>
             ) : (
               <button
-                onClick={handleSubmit}
+                onClick={isEditMode ? handleEditSubmit : handleSubmit}
                 disabled={saving}
                 className="flex items-center gap-2 px-8 py-2.5 rounded-xl text-white font-bold shadow-lg hover:shadow-xl transition-all active:scale-95 disabled:opacity-50"
                 style={{ background: saving ? '#9ca3af' : 'linear-gradient(135deg,#059669,#047857)' }}
               >
                 {saving ? (
                   <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />{t.loading}</>
+                ) : isEditMode ? (
+                  <><Check className="w-4 h-4" />{lang === 'dari' ? 'ذخیره تغییرات' : 'بدلونونه خوندي کول'}</>
                 ) : (
                   <><Check className="w-4 h-4" />{lang === 'dari' ? 'ثبت و چاپ بل' : 'ثبت او چاپ بل'}</>
                 )}

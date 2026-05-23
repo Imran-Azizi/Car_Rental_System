@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ownerPortalAPI } from '@/lib/api';
-import { Car, FileText, TrendingUp, DollarSign, CheckCircle, Clock, ArrowLeft, Activity, Hourglass } from 'lucide-react';
+import { Car, FileText, TrendingUp, DollarSign, CheckCircle, Clock, ArrowLeft, Activity, Hourglass, TrendingDown, Wallet, Bell } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { formatAfghanDate, formatCurrency } from '@/lib/utils';
 
@@ -54,13 +54,14 @@ export default function OwnerDashboardPage() {
   const { stats, recentContracts, cars } = data || {};
 
   const statCards = [
-    { label: 'مجموع موترها',    value: stats?.totalCars ?? 0,                    icon: Car,        gradient: 'linear-gradient(135deg,#f59e0b,#d97706)' },
-    { label: 'موترهای آزاد',   value: stats?.availableCars ?? 0,                icon: CheckCircle, gradient: 'linear-gradient(135deg,#10b981,#059669)' },
-    { label: 'موترهای کرایه',  value: stats?.rentedCars ?? 0,                   icon: Clock,       gradient: 'linear-gradient(135deg,#3b82f6,#2563eb)' },
-    { label: 'سفارش‌های فعال', value: stats?.activeContracts ?? 0,              icon: FileText,    gradient: 'linear-gradient(135deg,#8b5cf6,#7c3aed)' },
-    { label: 'سهم من (همه)',    value: formatCurrency(stats?.ownerShareTotal ?? 0),   icon: TrendingUp,  gradient: 'linear-gradient(135deg,#0d9488,#0f766e)' },
-    { label: 'مجموع کرایه‌ها', value: formatCurrency(stats?.totalContractValue ?? 0), icon: DollarSign, gradient: 'linear-gradient(135deg,#f59e0b,#92400e)' },
-    { label: 'مجموع دریافتی',  value: formatCurrency(stats?.totalReceived ?? 0),      icon: Hourglass,  gradient: 'linear-gradient(135deg,#0891b2,#0e7490)' },
+    { label: 'مجموع موترها',    value: stats?.totalCars ?? 0,                         icon: Car,         gradient: 'linear-gradient(135deg,#f59e0b,#d97706)' },
+    { label: 'موترهای آزاد',   value: stats?.availableCars ?? 0,                     icon: CheckCircle, gradient: 'linear-gradient(135deg,#10b981,#059669)' },
+    { label: 'موترهای کرایه',  value: stats?.rentedCars ?? 0,                        icon: Clock,       gradient: 'linear-gradient(135deg,#3b82f6,#2563eb)' },
+    { label: 'سفارش‌های فعال', value: stats?.activeContracts ?? 0,                   icon: FileText,    gradient: 'linear-gradient(135deg,#8b5cf6,#7c3aed)' },
+    { label: 'سهم من از کرایه', value: formatCurrency(stats?.ownerShareTotal ?? 0),   icon: TrendingUp,  gradient: 'linear-gradient(135deg,#0d9488,#0f766e)' },
+    { label: 'کسر مصارف',       value: formatCurrency(stats?.totalExpenseDeducted ?? 0), icon: TrendingDown, gradient: 'linear-gradient(135deg,#ef4444,#dc2626)', isNegative: true },
+    { label: 'درآمد خالص',      value: formatCurrency(stats?.netOwnerShare ?? 0),     icon: Wallet,      gradient: 'linear-gradient(135deg,#059669,#047857)', isHighlight: true },
+    { label: 'مجموع کرایه‌ها', value: formatCurrency(stats?.totalContractValue ?? 0), icon: DollarSign,  gradient: 'linear-gradient(135deg,#f59e0b,#92400e)' },
   ];
 
   return (
@@ -80,20 +81,60 @@ export default function OwnerDashboardPage() {
         </div>
       </div>
 
-      {/* Owner earnings highlight */}
-      <div className="rounded-2xl overflow-hidden shadow-md" style={{ border: '2px solid #0d9488' }}>
-        <div className="flex items-center gap-3 px-5 py-4" style={{ background: 'linear-gradient(135deg,#0d9488,#0f766e)' }}>
-          <div className="w-11 h-11 rounded-xl flex items-center justify-center bg-white/20 shrink-0">
-            <TrendingUp className="w-5 h-5 text-white" />
+      {/* Notification banner if unread notifications */}
+      {(data?.unreadNotificationCount ?? 0) > 0 && (
+        <Link href="/owner/notifications"
+          className="flex items-center gap-3 px-4 py-3 rounded-2xl border-2 border-red-200 bg-red-50/80 hover:bg-red-50 transition-colors">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-red-500 shrink-0">
+            <Bell className="w-4 h-4 text-white" />
           </div>
-          <div>
-            <p className="font-bold text-white text-base">سهم من از همه سفارش‌ها</p>
-            <p className="text-teal-200 text-xs mt-0.5">محاسبه شده از ۵۰٪ کل کرایه</p>
+          <div className="flex-1">
+            <p className="text-sm font-bold text-red-800">
+              {data.unreadNotificationCount} اعلان جدید دارید
+            </p>
+            <p className="text-xs text-red-500">برای مشاهده کسرهای مصرف کلیک کنید</p>
           </div>
-          <span className="mr-auto text-sm font-black text-white bg-white/25 px-3 py-1 rounded-full shrink-0">50%</span>
+          <ArrowLeft className="w-4 h-4 text-red-400" />
+        </Link>
+      )}
+
+      {/* Financial summary row */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Gross share */}
+        <div className="rounded-2xl overflow-hidden shadow-sm border-2 border-teal-200">
+          <div className="flex items-center gap-2 px-4 py-3" style={{ background: 'linear-gradient(135deg,#0d9488,#0f766e)' }}>
+            <TrendingUp className="w-4 h-4 text-white" />
+            <p className="font-bold text-white text-sm">سهم من از کرایه‌ها</p>
+            <span className="ms-auto text-xs font-bold text-white bg-white/20 px-2 py-0.5 rounded-full">50%</span>
+          </div>
+          <div className="px-4 py-4" style={{ background: 'linear-gradient(135deg,#f0fdfa,#ccfbf1)' }}>
+            <p className="text-2xl font-black text-teal-900">{formatCurrency(stats?.ownerShareTotal ?? 0)}</p>
+          </div>
         </div>
-        <div className="px-5 py-5" style={{ background: 'linear-gradient(135deg,#f0fdfa,#ccfbf1)' }}>
-          <p className="text-3xl font-black text-teal-900">{formatCurrency(stats?.ownerShareTotal ?? 0)}</p>
+
+        {/* Expense deductions */}
+        <div className="rounded-2xl overflow-hidden shadow-sm border-2 border-red-200">
+          <div className="flex items-center gap-2 px-4 py-3" style={{ background: 'linear-gradient(135deg,#ef4444,#dc2626)' }}>
+            <TrendingDown className="w-4 h-4 text-white" />
+            <p className="font-bold text-white text-sm">کسر مصارف</p>
+            <span className="ms-auto text-xs font-bold text-white bg-white/20 px-2 py-0.5 rounded-full">50%</span>
+          </div>
+          <div className="px-4 py-4" style={{ background: 'linear-gradient(135deg,#fff5f5,#fee2e2)' }}>
+            <p className="text-2xl font-black text-red-800">{formatCurrency(stats?.totalExpenseDeducted ?? 0)}</p>
+          </div>
+        </div>
+
+        {/* Net income */}
+        <div className="rounded-2xl overflow-hidden shadow-sm border-2 border-emerald-300">
+          <div className="flex items-center gap-2 px-4 py-3" style={{ background: 'linear-gradient(135deg,#059669,#047857)' }}>
+            <Wallet className="w-4 h-4 text-white" />
+            <p className="font-bold text-white text-sm">درآمد خالص</p>
+          </div>
+          <div className="px-4 py-4" style={{ background: 'linear-gradient(135deg,#f0fdf4,#dcfce7)' }}>
+            <p className={`text-2xl font-black ${(stats?.netOwnerShare ?? 0) >= 0 ? 'text-emerald-900' : 'text-red-700'}`}>
+              {formatCurrency(stats?.netOwnerShare ?? 0)}
+            </p>
+          </div>
         </div>
       </div>
 
@@ -146,7 +187,7 @@ export default function OwnerDashboardPage() {
                       <p className="text-amber-700 text-xs">{c.car?.carName} — {c.car?.plateNumber}</p>
                       <p className="text-amber-500 text-xs">{c.customer?.fullName}</p>
                     </div>
-                    <div className="text-left space-y-0.5">
+                    <div className="text-right space-y-0.5">
                       <p className="text-amber-800 font-semibold text-sm">{formatCurrency(c.totalRent)}</p>
                       {c.ownerShare > 0 && (
                         <p className="text-teal-700 text-xs font-bold">سهم: {formatCurrency(c.ownerShare)}</p>

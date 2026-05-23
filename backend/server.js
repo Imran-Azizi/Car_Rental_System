@@ -20,6 +20,7 @@ import ownerAuthRoutes from './routes/ownerAuth.js';
 import ownerPortalRoutes from './routes/ownerPortal.js';
 import expenseRoutes from './routes/expenses.js';
 import draftRoutes from './routes/drafts.js';
+import { cleanupExpiredDrafts } from './controllers/draftController.js';
 
 dotenv.config();
 
@@ -118,6 +119,10 @@ app.get('/api/health', async (req, res) => {
 
 // ── Error handler ─────────────────────────────────────────────────────────────
 app.use(errorHandler);
+
+// ── Draft expiration: clean up on startup and every hour ──────────────────────
+cleanupExpiredDrafts();
+setInterval(cleanupExpiredDrafts, 60 * 60 * 1000);
 
 // ── Server start ─────────────────────────────────────────────────────────────
 const server = app.listen(PORT, () => {

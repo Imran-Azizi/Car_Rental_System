@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useApp } from '@/lib/context';
 import {
   LayoutDashboard, Car, FileText, LogOut, X,
-  ClipboardList, UserCheck, ChevronRight, Wallet,
+  ClipboardList, UserCheck, ChevronLeft, Wallet,
 } from 'lucide-react';
 
 const navItems = [
@@ -64,10 +64,10 @@ export default function Sidebar({ open, setOpen }: { open: boolean; setOpen: (v:
               className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 group ${
                 active ? 'text-white shadow-lg' : 'text-white/60 hover:text-white hover:bg-white/5'
               }`}
-              style={active ? { background: 'linear-gradient(135deg,rgba(245,158,11,0.25),rgba(217,119,6,0.15))', borderLeft: '3px solid #f59e0b' } : {}}>
+              style={active ? { background: 'linear-gradient(135deg,rgba(245,158,11,0.25),rgba(217,119,6,0.15))', borderRight: '3px solid #f59e0b' } : {}}>
               <item.icon className={`w-5 h-5 shrink-0 transition-transform duration-150 ${active ? '' : 'group-hover:scale-110'}`} />
               <span className="flex-1">{t[item.key as keyof typeof t] as string}</span>
-              {active && <ChevronRight className="w-3 h-3 opacity-60" />}
+              {active && <ChevronLeft className="w-3 h-3 opacity-60" />}
             </Link>
           );
         })}

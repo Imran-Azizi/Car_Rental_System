@@ -24,6 +24,7 @@ export const getDashboardStats = async (req, res) => {
       recentContracts,
       pendingContractsList,
       recentPaymentsList,
+      expenseSplitsAgg,
     ] = await Promise.all([
       prisma.car.count(),
       prisma.car.count({ where: { status: 'AVAILABLE' } }),
@@ -79,6 +80,8 @@ export const getDashboardStats = async (req, res) => {
           },
         },
       }),
+      // Total expense deductions by split — must be last to match destructuring
+      prisma.expense.aggregate({ _sum: { adminShare: true, ownerShare: true, amount: true } }),
     ]);
 
     const totalContractValue    = totalContractValueAgg._sum.totalRent         || 0;
@@ -88,6 +91,11 @@ export const getDashboardStats = async (req, res) => {
     const adminIncome           = adminShareAllAgg._sum.adminShare              || 0;
     const ownerIncomeCompleted  = ownerShareCompletedAgg._sum.ownerShare        || 0;
     const adminIncomeCompleted  = adminShareCompletedAgg._sum.adminShare        || 0;
+    const totalExpenses         = expenseSplitsAgg._sum.amount                 || 0;
+    const adminExpenses         = expenseSplitsAgg._sum.adminShare             || 0;
+    const ownerExpenses         = expenseSplitsAgg._sum.ownerShare             || 0;
+    const adminNetIncome        = adminIncome - adminExpenses;
+    const ownerNetIncome        = ownerIncome - ownerExpenses;
 
     // Monthly income chart — last 6 months
     const monthlyIncome = {};
@@ -103,10 +111,15 @@ export const getDashboardStats = async (req, res) => {
       totalContractValue,
       totalReceived,
       pendingPayments,
-      ownerIncome,           // from ALL contracts
-      adminIncome,           // from ALL contracts
-      ownerIncomeCompleted,  // from COMPLETED contracts
-      adminIncomeCompleted,  // from COMPLETED contracts
+      ownerIncome,
+      adminIncome,
+      ownerIncomeCompleted,
+      adminIncomeCompleted,
+      totalExpenses,
+      adminExpenses,
+      ownerExpenses,
+      adminNetIncome,
+      ownerNetIncome,
       monthlyIncome,
       recentContracts,
       pendingContractsList,

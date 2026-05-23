@@ -12,7 +12,7 @@ import {
   Plus, Search, Edit, Trash2, Wallet, Calendar,
   Printer, ChevronLeft, ChevronRight, SlidersHorizontal,
   X, TrendingDown, DollarSign, BarChart3, CalendarDays,
-  User, ArrowUpDown, Filter,
+  User, ArrowUpDown, Filter, Scissors, UserCheck, ShieldCheck,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -23,12 +23,14 @@ interface Expense {
   fromWhom: string;
   toWhom: string;
   amount: number;
+  adminShare: number;
+  ownerShare: number;
   date: string;
   description?: string;
   carId?: string;
   createdBy: string;
   createdAt: string;
-  car?: { id: string; carName: string; plateNumber: string } | null;
+  car?: { id: string; carName: string; plateNumber: string; ownerId?: string; owner?: { id: string; fullName: string } | null } | null;
 }
 
 interface Stats {
@@ -273,6 +275,15 @@ export default function ExpensesPage() {
     `w-full px-3 py-2.5 rounded-xl input-golden text-sm ${errors[field] ? 'border-red-400 bg-red-50' : ''}`;
   const lbl = 'block text-sm font-medium text-amber-800 mb-1';
 
+  // ── 50/50 split preview ────────────────────────────────────────────────────
+
+  const parsedModalAmount = parseFloat(form.amount) || 0;
+  const selectedCar       = cars.find(c => c.id === form.carId);
+  const carHasOwner       = !!(selectedCar?.ownerId);
+  const splitAdminShare   = Math.round(parsedModalAmount * 0.5 * 100) / 100;
+  const splitOwnerShare   = Math.round((parsedModalAmount - splitAdminShare) * 100) / 100;
+  const showSplitPreview  = form.carId && parsedModalAmount > 0;
+
   // ── Stat cards ─────────────────────────────────────────────────────────────
 
   const statCards = [
@@ -436,9 +447,21 @@ export default function ExpensesPage() {
                     </td>
                     <td className="px-4 py-3 text-sm text-amber-800 font-medium">{exp.toWhom}</td>
                     <td className="px-4 py-3">
-                      <span className="font-bold text-sm text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg">
-                        {formatNumber(exp.amount)} {t.currency}
-                      </span>
+                      <div className="space-y-1">
+                        <span className="font-bold text-sm text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg block w-fit">
+                          {formatNumber(exp.amount)} {t.currency}
+                        </span>
+                        {exp.carId && (exp.adminShare > 0 || exp.ownerShare > 0) && (
+                          <div className="flex gap-1 flex-wrap">
+                            <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">
+                              ادمین: {formatNumber(exp.adminShare)}
+                            </span>
+                            <span className="text-xs px-1.5 py-0.5 rounded bg-teal-100 text-teal-700 font-medium">
+                              صاحب: {formatNumber(exp.ownerShare)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-sm text-amber-700">
                       <span className="flex items-center gap-1">
@@ -588,6 +611,64 @@ export default function ExpensesPage() {
               className={`${inp('description')} resize-none`}
               placeholder="توضیحات اضافی در مورد این مصرف..." />
           </div>
+
+          {/* ── 50/50 Split Preview ────────────────────────────────── */}
+          {showSplitPreview && (
+            <div className="sm:col-span-2">
+              <div className="rounded-2xl overflow-hidden border-2 border-emerald-200 shadow-sm">
+                {/* Header */}
+                <div className="flex items-center gap-2 px-4 py-3"
+                  style={{ background: 'linear-gradient(135deg,#059669,#047857)' }}>
+                  <Scissors className="w-4 h-4 text-white" />
+                  <h4 className="text-sm font-bold text-white">تقسیم خودکار مصرف (۵۰٪ / ۵۰٪)</h4>
+                </div>
+
+                {/* Cards */}
+                <div className="grid grid-cols-3 gap-0 divide-x divide-x-reverse divide-emerald-100 bg-white">
+                  {/* Total */}
+                  <div className="p-4 text-center">
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center mx-auto mb-2"
+                      style={{ background: 'linear-gradient(135deg,#fef3c7,#fde68a)' }}>
+                      <Wallet className="w-4 h-4 text-amber-600" />
+                    </div>
+                    <p className="text-xs text-gray-500 mb-1">مجموع مصرف</p>
+                    <p className="text-lg font-black text-gray-800" dir="ltr">{formatNumber(parsedModalAmount)}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">افغانی</p>
+                  </div>
+
+                  {/* Admin share */}
+                  <div className="p-4 text-center bg-amber-50/60">
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center mx-auto mb-2"
+                      style={{ background: 'linear-gradient(135deg,#fbbf24,#d97706)' }}>
+                      <ShieldCheck className="w-4 h-4 text-white" />
+                    </div>
+                    <p className="text-xs text-amber-700 font-semibold mb-1">سهم ادمین (۵۰٪)</p>
+                    <p className="text-lg font-black text-amber-900" dir="ltr">{formatNumber(splitAdminShare)}</p>
+                    <p className="text-xs text-amber-500 mt-0.5">افغانی</p>
+                  </div>
+
+                  {/* Owner share */}
+                  <div className="p-4 text-center bg-teal-50/60">
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center mx-auto mb-2"
+                      style={{ background: 'linear-gradient(135deg,#0d9488,#0f766e)' }}>
+                      <UserCheck className="w-4 h-4 text-white" />
+                    </div>
+                    <p className="text-xs text-teal-700 font-semibold mb-1">سهم صاحب موتر (۵۰٪)</p>
+                    <p className="text-lg font-black text-teal-900" dir="ltr">{formatNumber(splitOwnerShare)}</p>
+                    <p className="text-xs text-teal-500 mt-0.5">افغانی</p>
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className={`px-4 py-2.5 flex items-center gap-2 text-xs font-medium ${carHasOwner ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${carHasOwner ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+                  {carHasOwner
+                    ? `اعلان کسر ${formatNumber(splitOwnerShare)} افغانی به صاحب موتر "${selectedCar?.carName}" ارسال خواهد شد`
+                    : `این موتر صاحب ثبت‌شده ندارد — هیچ اعلانی ارسال نخواهد شد`}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex gap-3 mt-5">

@@ -1,5 +1,6 @@
 import prisma from '../utils/prisma.js';
 import { sendSuccess, sendError } from '../utils/response.js';
+import { deleteUploadedFile } from '../utils/fileUtils.js';
 
 export const getCars = async (req, res) => {
   try {
@@ -72,7 +73,10 @@ export const updateCar = async (req, res) => {
 
 export const deleteCar = async (req, res) => {
   try {
-    await prisma.car.delete({ where: { id: req.params.id } });
+    // Fetch all images before cascade-deleting so we can remove physical files
+    const images = await prisma.carImage.findMany({ where: { carId: req.params.id }, select: { url: true } });
+    await prisma.car.delete({ where: { id: req.params.id } }); // cascade deletes CarImage rows
+    images.forEach(img => deleteUploadedFile(img.url));
     sendSuccess(res, null, 'موتر موفقانه حذف شد');
   } catch (err) { sendError(res, err.message); }
 };

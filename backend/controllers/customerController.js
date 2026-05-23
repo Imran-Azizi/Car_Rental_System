@@ -1,5 +1,6 @@
 import prisma from '../utils/prisma.js';
 import { sendSuccess, sendError } from '../utils/response.js';
+import { deleteUploadedFile } from '../utils/fileUtils.js';
 
 const pick = (body, photoUrl) => {
   const { fullName, fatherName, grandfatherName, tazkiraNumber, province, district, village, currentAddress, permanentAddress, phoneNumber, occupation, notes } = body;
@@ -39,7 +40,13 @@ export const createCustomer = async (req, res) => {
 
 export const updateCustomer = async (req, res) => {
   try {
-    const photoUrl = req.file ? `/uploads/customers/${req.file.filename}` : undefined;
+    let photoUrl;
+    if (req.file) {
+      // Delete the old photo if a new one is being uploaded
+      const existing = await prisma.customer.findUnique({ where: { id: req.params.id }, select: { photo: true } });
+      if (existing?.photo) deleteUploadedFile(existing.photo);
+      photoUrl = `/uploads/customers/${req.file.filename}`;
+    }
     const customer = await prisma.customer.update({ where: { id: req.params.id }, data: pick(req.body, photoUrl) });
     sendSuccess(res, customer, 'مشتری موفقانه بروز شد');
   } catch (err) { sendError(res, err.message); }
@@ -47,7 +54,10 @@ export const updateCustomer = async (req, res) => {
 
 export const deleteCustomer = async (req, res) => {
   try {
+    const existing = await prisma.customer.findUnique({ where: { id: req.params.id }, select: { photo: true } });
+    if (!existing) return sendError(res, 'مشتری یافت نشد', 404);
     await prisma.customer.delete({ where: { id: req.params.id } });
+    deleteUploadedFile(existing.photo);
     sendSuccess(res, null, 'مشتری موفقانه حذف شد');
   } catch (err) { sendError(res, err.message); }
 };

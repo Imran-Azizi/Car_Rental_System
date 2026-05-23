@@ -228,7 +228,7 @@ export default function CarOwnersPage() {
               )}
               {photoPreview && (
                 <button onClick={() => { setPhotoFile(null); setPhotoPreview(editOwner?.photo ? `${API_URL}${editOwner.photo}` : null); if (fileRef.current) fileRef.current.value = ''; }}
-                  className="absolute -top-1 -left-1 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center">
+                  className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center">
                   <X className="w-3 h-3" />
                 </button>
               )}

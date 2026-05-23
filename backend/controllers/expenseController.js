@@ -30,6 +30,13 @@ function monthRange() {
   return { gte: start, lte: end };
 }
 
+/** Calculate 50/50 split — returns { adminShare, ownerShare } */
+function calcSplit(amount) {
+  const adminShare = Math.round(amount * 0.5 * 100) / 100;
+  const ownerShare = Math.round((amount - adminShare) * 100) / 100;
+  return { adminShare, ownerShare };
+}
+
 // ── controllers ───────────────────────────────────────────────────────────────
 
 export const getExpenseStats = async (req, res) => {
@@ -37,15 +44,17 @@ export const getExpenseStats = async (req, res) => {
     const isOwner = req.owner !== undefined;
     const ownerId = isOwner ? req.owner.id : null;
 
-    const ownerCarFilter = ownerId
-      ? { car: { ownerId } }
-      : {};
+    const ownerCarFilter = ownerId ? { car: { ownerId } } : {};
 
-    const [today, week, month, total] = await Promise.all([
+    const [today, week, month, total, totalSplits] = await Promise.all([
       prisma.expense.aggregate({ where: { date: dayRange(), ...ownerCarFilter }, _sum: { amount: true }, _count: true }),
       prisma.expense.aggregate({ where: { date: weekRange(), ...ownerCarFilter }, _sum: { amount: true }, _count: true }),
       prisma.expense.aggregate({ where: { date: monthRange(), ...ownerCarFilter }, _sum: { amount: true }, _count: true }),
       prisma.expense.aggregate({ where: { ...ownerCarFilter }, _sum: { amount: true }, _count: true }),
+      prisma.expense.aggregate({
+        where: { ...ownerCarFilter },
+        _sum: { amount: true, adminShare: true, ownerShare: true },
+      }),
     ]);
 
     sendSuccess(res, {
@@ -53,6 +62,10 @@ export const getExpenseStats = async (req, res) => {
       week:   { amount: week._sum.amount   || 0, count: week._count   },
       month:  { amount: month._sum.amount  || 0, count: month._count  },
       total:  { amount: total._sum.amount  || 0, count: total._count  },
+      splits: {
+        totalAdminShare: totalSplits._sum.adminShare || 0,
+        totalOwnerShare: totalSplits._sum.ownerShare || 0,
+      },
     });
   } catch (err) { sendError(res, err.message); }
 };
@@ -66,12 +79,8 @@ export const getExpenses = async (req, res) => {
 
     const where = {};
 
-    // Car owner scoping
-    if (ownerId) {
-      where.car = { ownerId };
-    }
+    if (ownerId) where.car = { ownerId };
 
-    // Date range
     if (dateFrom || dateTo) {
       where.date = {};
       if (dateFrom) where.date.gte = new Date(dateFrom);
@@ -82,7 +91,6 @@ export const getExpenses = async (req, res) => {
       }
     }
 
-    // Search
     if (search) {
       where.OR = [
         { fromWhom:    { contains: search, mode: 'insensitive' } },
@@ -104,7 +112,14 @@ export const getExpenses = async (req, res) => {
         orderBy: { [orderField]: orderDir },
         skip,
         take: Number(limit),
-        include: { car: { select: { id: true, carName: true, plateNumber: true, ownerId: true } } },
+        include: {
+          car: {
+            select: {
+              id: true, carName: true, plateNumber: true, ownerId: true,
+              owner: { select: { id: true, fullName: true } },
+            },
+          },
+        },
       }),
       prisma.expense.count({ where }),
     ]);
@@ -125,11 +140,17 @@ export const getExpenseById = async (req, res) => {
   try {
     const expense = await prisma.expense.findUnique({
       where: { id: req.params.id },
-      include: { car: { select: { id: true, carName: true, plateNumber: true, ownerId: true } } },
+      include: {
+        car: {
+          select: {
+            id: true, carName: true, plateNumber: true, ownerId: true,
+            owner: { select: { id: true, fullName: true } },
+          },
+        },
+      },
     });
     if (!expense) return sendError(res, 'مصرف یافت نشد', 404);
 
-    // Owner can only view expenses linked to their cars
     if (req.owner && expense.car?.ownerId !== req.owner.id) {
       return sendError(res, 'دسترسی غیرمجاز', 403);
     }
@@ -151,11 +172,18 @@ export const createExpense = async (req, res) => {
       return sendError(res, 'مقدار پول باید عدد مثبت باشد', 400);
     }
 
-    // Verify car exists if provided
+    // Fetch car with owner when provided
+    let car = null;
     if (carId) {
-      const car = await prisma.car.findUnique({ where: { id: carId } });
+      car = await prisma.car.findUnique({
+        where: { id: carId },
+        include: { owner: { select: { id: true, fullName: true, phoneNumber: true } } },
+      });
       if (!car) return sendError(res, 'موتر یافت نشد', 404);
     }
+
+    // Calculate 50/50 split — only applies when a car is linked
+    const { adminShare, ownerShare } = carId ? calcSplit(parsedAmount) : { adminShare: parsedAmount, ownerShare: 0 };
 
     const createdBy = req.user?.name || req.user?.email || 'مدیر سیستم';
 
@@ -164,13 +192,43 @@ export const createExpense = async (req, res) => {
         fromWhom: fromWhom.trim(),
         toWhom: toWhom.trim(),
         amount: parsedAmount,
+        adminShare,
+        ownerShare,
         date: new Date(date),
         description: description?.trim() || null,
         carId: carId || null,
         createdBy,
       },
-      include: { car: { select: { id: true, carName: true, plateNumber: true } } },
+      include: {
+        car: {
+          select: {
+            id: true, carName: true, plateNumber: true, ownerId: true,
+            owner: { select: { id: true, fullName: true } },
+          },
+        },
+      },
     });
+
+    // Create owner notification if the car has an owner
+    if (car?.owner?.id && ownerShare > 0) {
+      const dateStr = new Date(date).toLocaleDateString('fa-AF-u-ca-persian-nu-latn');
+      await prisma.ownerNotification.create({
+        data: {
+          ownerId:   car.owner.id,
+          title:     'کسر مصرف از حساب شما',
+          message:   `مصرف جدید برای موتر ${car.carName} (${car.plateNumber}) ثبت شد.\n` +
+                     `مجموع مصرف: ${parsedAmount.toLocaleString('en-US')} افغانی\n` +
+                     `سهم شما (۵۰٪): ${ownerShare.toLocaleString('en-US')} افغانی از حساب شما کسر گردید\n` +
+                     `سهم ادمین (۵۰٪): ${adminShare.toLocaleString('en-US')} افغانی\n` +
+                     `${description ? 'توضیحات: ' + description.trim() + '\n' : ''}` +
+                     `تاریخ: ${dateStr} | ثبت‌کننده: ${createdBy}`,
+          type:      'EXPENSE',
+          carId:     carId || null,
+          expenseId: expense.id,
+          amount:    ownerShare,
+        },
+      });
+    }
 
     sendSuccess(res, expense, 'مصرف موفقانه ثبت شد', 201);
   } catch (err) { sendError(res, err.message); }
@@ -197,17 +255,28 @@ export const updateExpense = async (req, res) => {
       if (!car) return sendError(res, 'موتر یافت نشد', 404);
     }
 
+    const { adminShare, ownerShare } = carId ? calcSplit(parsedAmount) : { adminShare: parsedAmount, ownerShare: 0 };
+
     const expense = await prisma.expense.update({
       where: { id: req.params.id },
       data: {
         fromWhom: fromWhom.trim(),
         toWhom: toWhom.trim(),
         amount: parsedAmount,
+        adminShare,
+        ownerShare,
         date: new Date(date),
         description: description?.trim() || null,
         carId: carId || null,
       },
-      include: { car: { select: { id: true, carName: true, plateNumber: true } } },
+      include: {
+        car: {
+          select: {
+            id: true, carName: true, plateNumber: true, ownerId: true,
+            owner: { select: { id: true, fullName: true } },
+          },
+        },
+      },
     });
 
     sendSuccess(res, expense, 'مصرف موفقانه بروز شد');

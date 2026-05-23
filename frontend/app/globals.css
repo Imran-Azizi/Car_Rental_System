@@ -119,6 +119,7 @@ body {
 .input-golden:hover:not(:focus) { border-color: var(--golden-500); }
 
 /* ── Sidebar ───────────────────────────────────── */
+/* In RTL the sidebar sits on the RIGHT; border-left is its content-facing edge ✓ */
 .sidebar {
   background: linear-gradient(180deg, #1a1200 0%, #231800 40%, #1a1200 100%);
   border-left: 1px solid rgba(245, 158, 11, 0.2);
@@ -165,7 +166,12 @@ body {
   from { transform: translateX(16px); opacity: 0; }
   to   { transform: translateX(0);    opacity: 1; }
 }
-.slide-in { animation: slideInRight 0.25s ease-out both; }
+@keyframes slideInLeft {
+  from { transform: translateX(-16px); opacity: 0; }
+  to   { transform: translateX(0);     opacity: 1; }
+}
+/* RTL: elements enter from the left (start side in RTL) */
+.slide-in { animation: slideInLeft 0.25s ease-out both; }
 
 @keyframes pulse {
   0%, 100% { opacity: 1; }
@@ -241,3 +247,47 @@ body {
   padding: 3rem 1rem;
   color: var(--golden-500);
 }
+
+/* ── RTL — global professional overrides ──────── */
+
+/* Tables: right-align all cells to match RTL reading direction */
+.table-golden th,
+.table-golden td { text-align: right; }
+
+/* Phone / numeric inputs: keep digits LTR, align text to the right */
+input[type="tel"],
+input[type="number"] {
+  direction: ltr;
+  text-align: right;
+}
+
+/* Mono / code text: always LTR */
+.font-mono { direction: ltr; unicode-bidi: embed; }
+
+/* Placeholder text: align to start (right in RTL) */
+::placeholder { text-align: right; }
+
+/* Select elements */
+select { direction: rtl; text-align: right; }
+
+/* Modal header: in RTL flexbox the close button auto-moves to left, title to right ✓ */
+
+/* Dropdown menus open toward the start (right) in RTL */
+.dropdown-menu { right: 0; left: auto; }
+
+/* Badge / notification absolute positioning stays top-right (RTL start corner) */
+
+/* Focus outline: symmetric, no physical direction */
+:focus-visible {
+  outline: 2px solid var(--golden-500);
+  outline-offset: 2px;
+}
+
+/* Scrollbar track on the left side in RTL (browser handles this automatically) */
+
+/* RTL-specific padding for icon-prefixed inputs (icon on right = padding-right) */
+.input-icon-start { padding-right: 2.5rem; padding-left: 0.75rem; }
+.input-icon-end   { padding-left:  2.5rem; padding-right: 0.75rem; }
+
+/* Ensure number-only badges render LTR */
+.badge-count { direction: ltr; display: inline-block; }

@@ -7,7 +7,7 @@ import Badge from '@/components/ui/Badge';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { useApp } from '@/lib/context';
 import { ordersAPI } from '@/lib/api';
-import { Plus, Search, Eye, Trash2, CheckCircle, CreditCard, Printer, Pencil } from 'lucide-react';
+import { Plus, Search, Eye, Trash2, CheckCircle, CreditCard, Printer, Pencil, Download, ZoomIn, ImageOff, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
 import ContractBill, { BillData } from '@/components/ContractBill';
@@ -39,9 +39,10 @@ export default function AllOrdersPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [returnId, setReturnId] = useState<string | null>(null);
   const [printBill, setPrintBill] = useState<BillData | null>(null);
-  const [editOrder, setEditOrder] = useState<any>(null);
-  const [editForm, setEditForm] = useState({ startDate: '', startTime: '', endDate: '', endTime: '', advancePayment: '', notes: '', status: '' });
-  const [savingEdit, setSavingEdit] = useState(false);
+  const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
+
+  const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api').replace('/api', '');
+  const imgUrl = (p: string | null | undefined) => (p ? `${API_BASE}${p}` : null);
 
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -129,41 +130,46 @@ export default function AllOrdersPage() {
     } catch { toast.error(t.error); } finally { setSavingPayment(false); }
   };
 
-  const openEdit = (c: any) => {
-    setEditOrder(c);
-    setEditForm({
-      startDate:      c.startDate ? c.startDate.split('T')[0] : '',
-      startTime:      c.startTime || '',
-      endDate:        c.endDate   ? c.endDate.split('T')[0]   : '',
-      endTime:        c.endTime   || '',
-      advancePayment: String(c.advancePayment ?? ''),
-      notes:          c.notes     || '',
-      status:         c.status    || 'ACTIVE',
-    });
-  };
-
-  const handleEdit = async () => {
-    if (!editOrder) return;
-    setSavingEdit(true);
-    try {
-      const payload: any = {
-        startDate:      new Date(editForm.startDate).toISOString(),
-        startTime:      editForm.startTime,
-        endDate:        new Date(editForm.endDate).toISOString(),
-        endTime:        editForm.endTime,
-        advancePayment: parseFloat(editForm.advancePayment) || 0,
-        notes:          editForm.notes,
-        status:         editForm.status,
-      };
-      await ordersAPI.update(editOrder.id, payload);
-      toast.success(lang === 'dari' ? 'سفارش ویرایش شد' : 'سفارش سم شو');
-      setEditOrder(null);
-      fetchData();
-    } catch { toast.error(t.error); } finally { setSavingEdit(false); }
-  };
 
   const formatDate = (d: string) => formatAfghanDate(d);
   const formatCurrency = (n: number) => fmtCur(n, t.currency);
+
+  // Reset lightbox when switching orders
+  useEffect(() => { setLightboxIdx(null); }, [viewOrder]);
+
+  const orderImages = viewOrder ? [
+    { url: imgUrl(viewOrder.customer?.photo),    label: lang === 'dari' ? 'عکس مشتری'         : 'د مشتري انځور',   filename: 'customer-photo' },
+    { url: imgUrl(viewOrder.guarantor?.photo),   label: lang === 'dari' ? 'عکس ضامن'          : 'د ضامن انځور',    filename: 'guarantor-photo' },
+    { url: imgUrl(viewOrder.billDocPhoto),        label: lang === 'dari' ? 'عکس بل / قرارداد'  : 'د بل انځور',      filename: 'bill-doc' },
+    { url: imgUrl(viewOrder.tazkiraDocPhoto),     label: lang === 'dari' ? 'عکس تذکره / هویت' : 'د تذکرې انځور',  filename: 'tazkira-doc' },
+  ].filter((img): img is { url: string; label: string; filename: string } => !!img.url) : [];
+
+  const downloadImage = async (url: string, filename: string) => {
+    try {
+      const resp = await fetch(url);
+      const blob = await resp.blob();
+      const ext  = blob.type.split('/')[1]?.split('+')[0] || 'jpg';
+      const a    = document.createElement('a');
+      a.href     = URL.createObjectURL(blob);
+      a.download = `${filename}.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+    } catch {
+      toast.error(lang === 'dari' ? 'خطا در دانلود تصویر' : 'د انځور ډاونلوډ کې تیروتنه');
+    }
+  };
+
+  const downloadAll = async () => {
+    for (let i = 0; i < orderImages.length; i++) {
+      await downloadImage(
+        orderImages[i].url,
+        `${viewOrder?.contractNumber || 'order'}-${orderImages[i].filename}`,
+      );
+      if (i < orderImages.length - 1) await new Promise(r => setTimeout(r, 400));
+    }
+  };
 
   return (
     <MainLayout>
@@ -258,7 +264,7 @@ export default function AllOrdersPage() {
                           {lang === 'dari' ? 'مشاهده' : 'کتل'}
                         </button>
                         <button
-                          onClick={() => openEdit(c)}
+                          onClick={() => router.push(`/orders/new?edit=${c.id}`)}
                           className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-orange-700 bg-orange-50 hover:bg-orange-100 transition-colors border border-orange-200"
                         >
                           <Pencil className="w-3.5 h-3.5" />
@@ -423,6 +429,70 @@ export default function AllOrdersPage() {
               </div>
             )}
 
+            {/* Images & Documents */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-xs font-bold text-amber-700 uppercase tracking-wider flex items-center gap-2">
+                  <span className="w-4 h-0.5 bg-amber-400 inline-block" />
+                  {lang === 'dari' ? 'تصاویر و اسناد' : 'انځورونه او اسناد'}
+                </h4>
+                {orderImages.length > 0 && (
+                  <button
+                    onClick={downloadAll}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-100 text-amber-800 hover:bg-amber-200 border border-amber-300 transition-colors"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    {lang === 'dari' ? 'دانلود همه' : 'ټول ډاونلوډ'}
+                  </button>
+                )}
+              </div>
+
+              {orderImages.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-10 rounded-xl border-2 border-dashed border-amber-200 bg-amber-50/50">
+                  <ImageOff className="w-10 h-10 text-amber-300 mb-3" />
+                  <p className="text-sm font-semibold text-amber-500">
+                    {lang === 'dari' ? 'هیچ تصویری برای این سفارش ثبت نشده است' : 'د دې سفارش لپاره هیڅ انځور نشته'}
+                  </p>
+                  <p className="text-xs text-amber-400 mt-1">
+                    {lang === 'dari' ? 'تصاویر هنگام ثبت سفارش آپلود می‌شوند' : 'انځورونه د سفارش د ثبت پر مهال پورته کیږي'}
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {orderImages.map((img, idx) => (
+                    <div key={idx} className="group rounded-xl overflow-hidden border-2 border-amber-100 bg-white shadow-sm hover:shadow-md transition-all">
+                      <div
+                        className="relative aspect-square cursor-pointer overflow-hidden bg-amber-50"
+                        onClick={() => setLightboxIdx(idx)}
+                      >
+                        <img
+                          src={img.url}
+                          alt={img.label}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          loading="lazy"
+                        />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-all flex items-center justify-center">
+                          <div className="w-9 h-9 rounded-full bg-white/90 shadow flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity scale-90 group-hover:scale-100 duration-200">
+                            <ZoomIn className="w-4 h-4 text-amber-800" />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="p-2.5 border-t border-amber-100">
+                        <p className="text-xs font-semibold text-amber-800 truncate text-center mb-1.5">{img.label}</p>
+                        <button
+                          onClick={() => downloadImage(img.url, `${viewOrder.contractNumber}-${img.filename}`)}
+                          className="w-full flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 transition-colors"
+                        >
+                          <Download className="w-3 h-3" />
+                          {lang === 'dari' ? 'دانلود' : 'ډاونلوډ'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Status & Actions */}
             <div className="flex items-center justify-between pt-3 border-t border-amber-200">
               <Badge variant={statusMap[viewOrder.status]?.variant} label={statusMap[viewOrder.status]?.[lang]} />
@@ -510,72 +580,88 @@ export default function AllOrdersPage() {
         open={!!deleteId}
         onClose={() => setDeleteId(null)}
         onConfirm={() => handleDelete(deleteId!)}
-        message={lang === 'dari' ? 'آیا از حذف این سفارش مطمئن هستید؟' : 'ایا د دې سفارش د ړنګولو ډاډه یاست؟'}
+        message={lang === 'dari'
+          ? 'آیا از حذف این سفارش مطمئن هستید؟ اگر مشتری فقط همین سفارش را داشته باشد، اطلاعات مشتری نیز حذف خواهد شد.'
+          : 'ایا د دې سفارش د ړنګولو ډاډه یاست؟ که مشتري یوازې دا سفارش ولري، د مشتري معلومات به هم ړنګ شي.'}
       />
 
-      {/* Edit Order Modal */}
-      <Modal open={!!editOrder} onClose={() => setEditOrder(null)} title={lang === 'dari' ? 'ویرایش سفارش' : 'د سفارش سمول'} size="lg">
-        {editOrder && (
-          <div className="space-y-4">
-            <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-sm">
-              <p className="text-amber-800 font-medium">{lang === 'dari' ? 'شماره سفارش:' : 'د سفارش شمیره:'} <span className="font-mono font-bold">{editOrder.contractNumber}</span></p>
-              <p className="text-amber-600 text-xs mt-0.5">{editOrder.customer?.fullName} — {editOrder.car?.carName}</p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className={labelCls}>{t.startDate}</label>
-                <input type="date" value={editForm.startDate} onChange={e => setEditForm(p => ({ ...p, startDate: e.target.value }))} className={inputCls} />
-                <input type="time" value={editForm.startTime} onChange={e => setEditForm(p => ({ ...p, startTime: e.target.value }))} className={`${inputCls} mt-1.5`} />
+      {/* Lightbox */}
+      {lightboxIdx !== null && viewOrder && orderImages[lightboxIdx] && (
+        <div
+          className="fixed inset-0 z-[9998] bg-black/95 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setLightboxIdx(null)}
+        >
+          <div
+            className="relative w-full max-w-4xl flex flex-col max-h-full"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Lightbox header */}
+            <div className="flex items-center justify-between mb-3 gap-3">
+              <div className="flex items-center gap-3">
+                <span className="text-white/50 text-sm font-mono">{lightboxIdx + 1} / {orderImages.length}</span>
+                <p className="text-white font-semibold text-sm">{orderImages[lightboxIdx].label}</p>
               </div>
-              <div>
-                <label className={labelCls}>{t.endDate}</label>
-                <input type="date" value={editForm.endDate} onChange={e => setEditForm(p => ({ ...p, endDate: e.target.value }))} className={inputCls} />
-                <input type="time" value={editForm.endTime} onChange={e => setEditForm(p => ({ ...p, endTime: e.target.value }))} className={`${inputCls} mt-1.5`} />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className={labelCls}>{lang === 'dari' ? 'مبلغ دریافت شده (افغانی)' : 'ترلاسه شوی مبلغ'}</label>
-                <input
-                  type="number"
-                  value={editForm.advancePayment}
-                  onChange={e => setEditForm(p => ({ ...p, advancePayment: e.target.value }))}
-                  className={inputCls}
-                  min="0"
-                />
-                {editOrder.totalRent > 0 && (
-                  <p className="text-xs text-amber-600 mt-1">
-                    {lang === 'dari' ? 'باقی مانده:' : 'پاتې:'} {fmtCur(Math.max(0, editOrder.totalRent - (parseFloat(editForm.advancePayment) || 0)), 'افغانی')}
-                  </p>
-                )}
-              </div>
-              <div>
-                <label className={labelCls}>{t.status}</label>
-                <select value={editForm.status} onChange={e => setEditForm(p => ({ ...p, status: e.target.value }))} className={inputCls}>
-                  <option value="ACTIVE">{lang === 'dari' ? 'فعال' : 'فعال'}</option>
-                  <option value="COMPLETED">{lang === 'dari' ? 'تکمیل شده' : 'بشپړ'}</option>
-                  <option value="CANCELLED">{lang === 'dari' ? 'لغو شده' : 'لغوه'}</option>
-                  <option value="OVERDUE">{lang === 'dari' ? 'ناوقت' : 'ناوخته'}</option>
-                </select>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => downloadImage(
+                    orderImages[lightboxIdx].url,
+                    `${viewOrder.contractNumber}-${orderImages[lightboxIdx].filename}`,
+                  )}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/10 text-white hover:bg-white/20 border border-white/20 transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  {lang === 'dari' ? 'دانلود' : 'ډاونلوډ'}
+                </button>
+                <button
+                  onClick={() => setLightboxIdx(null)}
+                  className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
             </div>
 
-            <div>
-              <label className={labelCls}>{t.notes}</label>
-              <textarea value={editForm.notes} onChange={e => setEditForm(p => ({ ...p, notes: e.target.value }))} rows={2} className={`${inputCls} resize-none`} />
+            {/* Image */}
+            <div className="flex-1 flex items-center justify-center rounded-xl overflow-hidden bg-black/40 min-h-0">
+              <img
+                src={orderImages[lightboxIdx].url}
+                alt={orderImages[lightboxIdx].label}
+                className="max-w-full max-h-[72vh] object-contain select-none"
+                draggable={false}
+              />
             </div>
 
-            <div className="flex gap-3 pt-2">
-              <button onClick={() => setEditOrder(null)} className="flex-1 btn-secondary py-2.5 rounded-xl text-sm">{t.cancel}</button>
-              <button onClick={handleEdit} disabled={savingEdit} className="flex-1 btn-primary py-2.5 rounded-xl text-sm disabled:opacity-50">
-                {savingEdit ? t.loading : t.save}
-              </button>
-            </div>
+            {/* Navigation */}
+            {orderImages.length > 1 && (
+              <div className="flex items-center justify-center gap-4 mt-4">
+                <button
+                  onClick={() => setLightboxIdx((lightboxIdx - 1 + orderImages.length) % orderImages.length)}
+                  className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/25 flex items-center justify-center text-white transition-colors"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+                <div className="flex gap-1.5">
+                  {orderImages.map((_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setLightboxIdx(i)}
+                      className={`h-2 rounded-full transition-all duration-200 ${
+                        i === lightboxIdx ? 'bg-amber-400 w-6' : 'w-2 bg-white/35 hover:bg-white/60'
+                      }`}
+                    />
+                  ))}
+                </div>
+                <button
+                  onClick={() => setLightboxIdx((lightboxIdx + 1) % orderImages.length)}
+                  className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/25 flex items-center justify-center text-white transition-colors"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+              </div>
+            )}
           </div>
-        )}
-      </Modal>
+        </div>
+      )}
 
       {printBill && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 9999, overflow: 'auto', background: '#d1d5db' }}>

@@ -1,31 +1,43 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, Car, FileText, LogOut, Menu, X, ChevronLeft } from 'lucide-react';
-import { ownerAuthAPI } from '@/lib/api';
+import { LayoutDashboard, Car, FileText, LogOut, Menu, X, ChevronLeft, Bell } from 'lucide-react';
+import { ownerAuthAPI, ownerPortalAPI } from '@/lib/api';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:5000';
 
 const navItems = [
-  { href: '/owner/dashboard', label: 'داشبورد', icon: LayoutDashboard },
-  { href: '/owner/cars', label: 'موترهای من', icon: Car },
-  { href: '/owner/contracts', label: 'قراردادها', icon: FileText },
+  { href: '/owner/dashboard',      label: 'داشبورد',    icon: LayoutDashboard },
+  { href: '/owner/cars',           label: 'موترهای من', icon: Car },
+  { href: '/owner/contracts',      label: 'قراردادها',  icon: FileText },
+  { href: '/owner/notifications',  label: 'اعلان‌ها',   icon: Bell },
 ];
 
 export default function OwnerLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [owner, setOwner] = useState<any>(null);
+  const [owner, setOwner]           = useState<any>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
+  const [mounted, setMounted]       = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  const fetchUnreadCount = useCallback(async () => {
+    try {
+      const res = await ownerPortalAPI.getUnreadCount();
+      setUnreadCount(res.data.data?.count ?? 0);
+    } catch { /* silent */ }
+  }, []);
 
   useEffect(() => {
     setMounted(true);
     const token = localStorage.getItem('ownerToken');
-    const user = localStorage.getItem('ownerUser');
+    const user  = localStorage.getItem('ownerUser');
     if (!token) { router.replace('/owner-login'); return; }
     if (user) setOwner(JSON.parse(user));
+    fetchUnreadCount();
+    const interval = setInterval(fetchUnreadCount, 2 * 60 * 1000);
+    return () => clearInterval(interval);
   }, []);
 
   const handleLogout = async () => {
@@ -79,7 +91,8 @@ export default function OwnerLayout({ children }: { children: React.ReactNode })
         {/* Navigation */}
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           {navItems.map(({ href, label, icon: Icon }) => {
-            const isActive = pathname === href;
+            const isActive  = pathname === href;
+            const isBellNav = href === '/owner/notifications';
             return (
               <Link key={href} href={href} onClick={() => setSidebarOpen(false)}
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
@@ -87,9 +100,19 @@ export default function OwnerLayout({ children }: { children: React.ReactNode })
                     ? 'text-white shadow-lg'
                     : 'text-white/60 hover:text-white hover:bg-white/5'
                 }`}
-                style={isActive ? { background: 'linear-gradient(135deg, rgba(245,158,11,0.25), rgba(217,119,6,0.15))', borderLeft: '3px solid #f59e0b' } : {}}>
-                <Icon className="w-5 h-5 shrink-0" />
-                {label}
+                style={isActive ? { background: 'linear-gradient(135deg, rgba(245,158,11,0.25), rgba(217,119,6,0.15))', borderRight: '3px solid #f59e0b' } : {}}>
+                <div className="relative shrink-0">
+                  <Icon className="w-5 h-5" />
+                  {isBellNav && unreadCount > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center leading-none">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
+                </div>
+                <span className="flex-1">{label}</span>
+                {isBellNav && unreadCount > 0 && (
+                  <span className="text-xs bg-red-500/20 text-red-300 px-1.5 py-0.5 rounded-full font-bold">{unreadCount}</span>
+                )}
               </Link>
             );
           })}
@@ -123,6 +146,18 @@ export default function OwnerLayout({ children }: { children: React.ReactNode })
               {navItems.find(n => n.href === pathname)?.label || 'پنل'}
             </span>
           </div>
+
+          {/* Notification bell */}
+          <Link href="/owner/notifications"
+            className="relative p-2 rounded-xl text-amber-700 hover:bg-amber-100 transition-colors"
+            title="اعلان‌ها">
+            <Bell className="w-5 h-5" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center shadow">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </Link>
 
           {/* Owner badge */}
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl"
