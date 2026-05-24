@@ -10,6 +10,10 @@ import { v2 as cloudinary } from 'cloudinary';
 
 cloudinary.config({ secure: true }); // auto-reads CLOUDINARY_URL
 
+if (!process.env.CLOUDINARY_URL) {
+  console.error('[storage] CLOUDINARY_URL env var is not set — file uploads will fail');
+}
+
 // ── Image mime-type whitelist ────────────────────────────────────────────────
 const IMAGE_FILTER = (req, file, cb) =>
   cb(null, ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'].includes(file.mimetype));
@@ -64,7 +68,10 @@ export function cloudinaryMiddleware(folder) {
 
       next();
     } catch (err) {
-      next(err);
+      const msg = !process.env.CLOUDINARY_URL
+        ? 'CLOUDINARY_URL is not configured on the server'
+        : `Cloudinary upload failed: ${err.message}`;
+      next(Object.assign(new Error(msg), { statusCode: 500 }));
     }
   };
 }
