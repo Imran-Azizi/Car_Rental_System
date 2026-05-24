@@ -32,6 +32,10 @@ const isProd = process.env.NODE_ENV === 'production';
 const app    = express();
 const PORT   = process.env.PORT || 5000;
 
+// Trust Railway / Vercel reverse-proxy so X-Forwarded-For is read correctly
+// and express-rate-limit can identify clients without throwing ERR_ERL_UNEXPECTED_X_FORWARDED_FOR
+app.set('trust proxy', 1);
+
 // ── Security headers ───────────────────────────────────────────────────────
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' }, // allow /uploads from different origin
@@ -46,6 +50,13 @@ const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:3000')
   .split(',')
   .map(s => s.trim())
   .filter(Boolean);
+
+// In development, always allow localhost (so local frontend can hit Railway/staging backends)
+if (!isProd) {
+  ['http://localhost:3000', 'http://localhost:5000'].forEach(o => {
+    if (!allowedOrigins.includes(o)) allowedOrigins.push(o);
+  });
+}
 
 // Optional regex pattern for dynamic origins (e.g. Vercel preview deployments)
 // Set CORS_ORIGIN_PATTERN=https://.*\.vercel\.app in Railway env vars
