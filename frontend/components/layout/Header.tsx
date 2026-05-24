@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useApp } from '@/lib/context';
 import { draftsAPI } from '@/lib/api';
 import { Menu, FileEdit } from 'lucide-react';
@@ -33,6 +34,21 @@ export default function Header({ onMenuClick }: { onMenuClick: () => void }) {
           aria-label="Toggle menu">
           <Menu className="w-5 h-5" />
         </button>
+        {/* Logo — visible on mobile only (desktop logo lives in sidebar) */}
+        <div className="flex items-center gap-2 lg:hidden">
+          <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center shrink-0"
+            style={{ background: '#fff', border: '1.5px solid #fde68a' }}>
+            <Image
+              src="/logo.png"
+              alt="افشار"
+              width={28}
+              height={28}
+              className="object-contain w-full h-full"
+            />
+          </div>
+          <span className="text-sm font-bold text-amber-900 tracking-wide">افشار</span>
+        </div>
+        {/* Desktop: text only (logo is in sidebar) */}
         <h1 className="text-base font-bold text-amber-900 hidden lg:block tracking-wide">
           {t.appName}
         </h1>

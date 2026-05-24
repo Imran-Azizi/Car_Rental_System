@@ -25,6 +25,11 @@ const vazirmatn = Vazirmatn({
 export const metadata: Metadata = {
   title: 'مرکز کرایه موتر افشار',
   description: 'سیستم مدیریت کرایه موتر افشار',
+  icons: {
+    icon:     '/logo.png',
+    shortcut: '/logo.png',
+    apple:    '/logo.png',
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

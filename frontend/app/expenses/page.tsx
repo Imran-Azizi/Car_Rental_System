@@ -13,6 +13,7 @@ import {
   Printer, ChevronLeft, ChevronRight, SlidersHorizontal,
   X, TrendingDown, DollarSign, BarChart3, CalendarDays,
   User, ArrowUpDown, Filter, Scissors, UserCheck, ShieldCheck,
+  Eye, Camera, FileText, ChevronDown, ZoomIn,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -30,6 +31,7 @@ interface Expense {
   carId?: string;
   createdBy: string;
   createdAt: string;
+  receiptPhoto?: string;
   car?: { id: string; carName: string; plateNumber: string; ownerId?: string; owner?: { id: string; fullName: string } | null } | null;
 }
 
@@ -49,10 +51,43 @@ const emptyForm = {
   description: '', carId: '',
 };
 
+type ReportPeriod = 'all' | 'daily' | 'weekly' | 'monthly' | 'yearly';
+
+const PERIOD_LABELS: Record<ReportPeriod, string> = {
+  all:     'همه مصارف',
+  daily:   'گزارش روزانه',
+  weekly:  'گزارش هفتگی',
+  monthly: 'گزارش ماهانه',
+  yearly:  'گزارش سالانه',
+};
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function todayISO() {
   return new Date().toISOString().split('T')[0];
+}
+
+function getPeriodRange(period: ReportPeriod): { dateFrom?: string; dateTo?: string; label: string } {
+  const now = new Date();
+  const iso = (d: Date) => d.toISOString().split('T')[0];
+  if (period === 'daily') {
+    const s = iso(now);
+    return { dateFrom: s, dateTo: s, label: `امروز — ${formatAfghanDate(now.toISOString())}` };
+  }
+  if (period === 'weekly') {
+    const start = new Date(now);
+    start.setDate(now.getDate() - now.getDay());
+    return { dateFrom: iso(start), dateTo: iso(now), label: `این هفته — ${formatAfghanDate(start.toISOString())} تا ${formatAfghanDate(now.toISOString())}` };
+  }
+  if (period === 'monthly') {
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    return { dateFrom: iso(start), dateTo: iso(now), label: `این ماه — ${formatAfghanDate(start.toISOString())} تا ${formatAfghanDate(now.toISOString())}` };
+  }
+  if (period === 'yearly') {
+    const start = new Date(now.getFullYear(), 0, 1);
+    return { dateFrom: iso(start), dateTo: iso(now), label: `این سال — ${formatAfghanDate(start.toISOString())} تا ${formatAfghanDate(now.toISOString())}` };
+  }
+  return { label: 'تمام دوره‌ها' };
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -61,6 +96,9 @@ export default function ExpensesPage() {
   const { t, token, user, lang } = useApp();
   const router = useRouter();
 
+  const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api').replace('/api', '');
+  const imgUrl = (p?: string | null) => (p ? `${API_BASE}${p}` : null);
+
   // Data
   const [expenses, setExpenses]   = useState<Expense[]>([]);
   const [stats, setStats]         = useState<Stats | null>(null);
@@ -68,15 +106,22 @@ export default function ExpensesPage() {
   const [pagination, setPagination] = useState<Pagination>({ total: 0, page: 1, limit: 20, totalPages: 1 });
 
   // UI state
-  const [loading, setLoading]       = useState(true);
+  const [loading, setLoading]         = useState(true);
   const [statsLoading, setStatsLoading] = useState(true);
-  const [saving, setSaving]         = useState(false);
-  const [modalOpen, setModalOpen]   = useState(false);
+  const [saving, setSaving]           = useState(false);
+  const [modalOpen, setModalOpen]     = useState(false);
   const [editExpense, setEditExpense] = useState<Expense | null>(null);
-  const [deleteId, setDeleteId]     = useState<string | null>(null);
+  const [deleteId, setDeleteId]       = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
-  const [form, setForm]             = useState(emptyForm);
-  const [errors, setErrors]         = useState<Record<string, string>>({});
+  const [form, setForm]               = useState(emptyForm);
+  const [errors, setErrors]           = useState<Record<string, string>>({});
+  const [detailExpense, setDetailExpense] = useState<Expense | null>(null);
+  const [receiptLightbox, setReceiptLightbox] = useState<string | null>(null);
+
+  // Receipt upload
+  const [receiptFile, setReceiptFile]       = useState<File | null>(null);
+  const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
+  const receiptInputRef = useRef<HTMLInputElement>(null);
 
   // Filters
   const [search, setSearch]     = useState('');
@@ -86,11 +131,16 @@ export default function ExpensesPage() {
   const [sortDir, setSortDir]   = useState<'asc' | 'desc'>('desc');
   const [page, setPage]         = useState(1);
 
+  // Print
+  const [reportPeriod, setReportPeriod] = useState<ReportPeriod>('all');
+  const [showPeriodMenu, setShowPeriodMenu] = useState(false);
+  const [printLoading, setPrintLoading]   = useState(false);
+  const periodMenuRef = useRef<HTMLDivElement>(null);
+
   // Debounce
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => { if (!token) router.push('/'); }, [token]);
-
   useEffect(() => { if (token) { fetchStats(); fetchCars(); } }, [token]);
 
   useEffect(() => {
@@ -101,6 +151,17 @@ export default function ExpensesPage() {
   }, [search, dateFrom, dateTo, sortBy, sortDir, token]);
 
   useEffect(() => { if (token) fetchExpenses(page); }, [page]);
+
+  // Close period dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (periodMenuRef.current && !periodMenuRef.current.contains(e.target as Node)) {
+        setShowPeriodMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   // ── API calls ──────────────────────────────────────────────────────────────
 
@@ -143,6 +204,8 @@ export default function ExpensesPage() {
     setEditExpense(null);
     setForm(emptyForm);
     setErrors({});
+    setReceiptFile(null);
+    setReceiptPreview(null);
     setModalOpen(true);
   };
 
@@ -157,6 +220,8 @@ export default function ExpensesPage() {
       carId: exp.carId || '',
     });
     setErrors({});
+    setReceiptFile(null);
+    setReceiptPreview(exp.receiptPhoto ? imgUrl(exp.receiptPhoto) : null);
     setModalOpen(true);
   };
 
@@ -171,11 +236,20 @@ export default function ExpensesPage() {
     return Object.keys(errs).length === 0;
   };
 
+  const handleReceiptFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (f.size > 5 * 1024 * 1024) { toast.error('حجم فایل نباید بیشتر از 5MB باشد'); return; }
+    setReceiptFile(f);
+    setReceiptPreview(URL.createObjectURL(f));
+    e.target.value = '';
+  };
+
   const handleSave = async () => {
     if (!validate()) return;
     setSaving(true);
     try {
-      const payload = {
+      const baseData = {
         fromWhom: form.fromWhom.trim(),
         toWhom: form.toWhom.trim(),
         amount: form.amount,
@@ -183,8 +257,20 @@ export default function ExpensesPage() {
         description: form.description.trim() || undefined,
         carId: form.carId || undefined,
       };
+
+      let payload: FormData | typeof baseData;
+      if (receiptFile) {
+        const fd = new FormData();
+        Object.entries(baseData).forEach(([k, v]) => v !== undefined && fd.append(k, v));
+        fd.append('receiptPhoto', receiptFile);
+        payload = fd;
+      } else {
+        payload = baseData;
+      }
+
       if (editExpense) await expensesAPI.update(editExpense.id, payload);
       else             await expensesAPI.create(payload);
+
       toast.success(t.expenseSaved);
       setModalOpen(false);
       fetchExpenses(1); setPage(1);
@@ -218,58 +304,114 @@ export default function ExpensesPage() {
 
   // ── Print ──────────────────────────────────────────────────────────────────
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
+    setPrintLoading(true);
+    let reportExpenses = expenses;
+    const { dateFrom: df, dateTo: dt, label: periodLabel } = getPeriodRange(reportPeriod);
+
+    if (reportPeriod !== 'all') {
+      try {
+        const res = await expensesAPI.getAll({
+          limit: 9999,
+          dateFrom: df,
+          dateTo: dt,
+          sortBy: 'date',
+          sortDir: 'asc',
+        });
+        reportExpenses = res.data.data.expenses;
+      } catch { /* fallback to current page */ }
+    }
+    setPrintLoading(false);
+
     const win = window.open('', '_blank');
     if (!win) return;
-    const rows = expenses.map((e, i) => `
+
+    const totalAmount = reportExpenses.reduce((s, e) => s + e.amount, 0);
+    const totalAdmin  = reportExpenses.reduce((s, e) => s + (e.adminShare || 0), 0);
+    const totalOwner  = reportExpenses.reduce((s, e) => s + (e.ownerShare || 0), 0);
+
+    const rows = reportExpenses.map((e, i) => `
       <tr>
         <td>${i + 1}</td>
         <td>${e.fromWhom}</td>
         <td>${e.toWhom}</td>
-        <td style="direction:ltr">${formatNumber(e.amount)} ؋</td>
+        <td style="direction:ltr;text-align:center">${formatNumber(e.amount)} ؋</td>
         <td>${formatAfghanDate(e.date)}</td>
         <td>${e.description || '—'}</td>
-        <td>${e.car ? `${e.car.carName} (${e.car.plateNumber})` : '—'}</td>
+        <td>${e.car ? `${e.car.carName}<br><span style="font-size:10px;color:#6b7280">${e.car.plateNumber}</span>` : '—'}</td>
+        <td style="direction:ltr;text-align:center">${formatNumber(e.adminShare || 0)}</td>
+        <td style="direction:ltr;text-align:center">${formatNumber(e.ownerShare || 0)}</td>
         <td>${e.createdBy}</td>
       </tr>`).join('');
+
     win.document.write(`
       <!DOCTYPE html><html dir="rtl"><head>
       <meta charset="utf-8">
-      <title>گزارش مصارف روزانه</title>
+      <title>${PERIOD_LABELS[reportPeriod]} — مصارف روزانه</title>
       <style>
-        body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 20px; direction: rtl; }
-        h2 { color: #92400e; }
-        table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 16px; }
-        th { background: #f59e0b; color: white; padding: 8px 6px; }
-        td { padding: 6px; border-bottom: 1px solid #fde68a; }
-        tr:nth-child(even) { background: #fef9f0; }
-        .summary { display: flex; gap: 24px; margin: 12px 0; flex-wrap: wrap; }
-        .stat { background: #fef3c7; padding: 10px 16px; border-radius: 8px; }
-        .stat strong { display: block; font-size: 18px; color: #92400e; }
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 20px; direction: rtl; color: #1a1a1a; }
+        .header { border-bottom: 3px solid #d97706; padding-bottom: 12px; margin-bottom: 16px; }
+        h2 { color: #92400e; margin: 0 0 4px; font-size: 20px; }
+        .subtitle { color: #6b7280; font-size: 13px; }
+        .period-badge { display:inline-block; background:#fef3c7; border:1px solid #fbbf24; color:#92400e; border-radius:6px; padding:2px 10px; font-size:12px; font-weight:bold; margin-bottom:8px; }
+        .summary { display: flex; gap: 16px; margin: 14px 0; flex-wrap: wrap; }
+        .stat { background: #fef3c7; padding: 10px 16px; border-radius: 8px; border: 1px solid #fde68a; min-width: 130px; }
+        .stat span { font-size: 11px; color: #92400e; display:block; margin-bottom:2px; }
+        .stat strong { font-size: 17px; color: #78350f; display:block; }
+        .stat.admin strong { color: #1d4ed8; }
+        .stat.owner strong { color: #047857; }
+        table { width: 100%; border-collapse: collapse; font-size: 11.5px; margin-top: 12px; }
+        th { background: #b45309; color: white; padding: 8px 6px; border: 1px solid #92400e; text-align: right; }
+        td { padding: 6px; border: 1px solid #fde68a; text-align: right; vertical-align: top; }
+        tr:nth-child(even) { background: #fefce8; }
+        tr:hover { background: #fef9e7; }
+        .footer-note { margin-top: 16px; color: #6b7280; font-size: 11px; border-top: 1px solid #fde68a; padding-top: 8px; }
+        .totals-row { background: #fef3c7 !important; font-weight: bold; border-top: 2px solid #d97706; }
+        @media print { @page { margin: 10mm; } body { margin: 0; } }
       </style>
       </head><body>
-      <h2>گزارش مصارف روزانه — مرکز کرایه موتر افشار</h2>
-      <p>تاریخ چاپ: ${formatAfghanDate(new Date().toISOString())}</p>
-      ${stats ? `<div class="summary">
-        <div class="stat"><span>امروز</span><strong>${formatNumber(stats.today.amount)} ؋</strong></div>
-        <div class="stat"><span>این هفته</span><strong>${formatNumber(stats.week.amount)} ؋</strong></div>
-        <div class="stat"><span>این ماه</span><strong>${formatNumber(stats.month.amount)} ؋</strong></div>
-        <div class="stat"><span>مجموع</span><strong>${formatNumber(stats.total.amount)} ؋</strong></div>
-      </div>` : ''}
+      <div class="header">
+        <h2>مرکز کرایه موتر افشار — گزارش مصارف روزانه</h2>
+        <div class="subtitle">تاریخ چاپ: ${formatAfghanDate(new Date().toISOString())}</div>
+      </div>
+      <div class="period-badge">${PERIOD_LABELS[reportPeriod]}: ${periodLabel}</div>
+      <div class="summary">
+        <div class="stat"><span>مجموع مصارف</span><strong>${formatNumber(totalAmount)} ؋</strong></div>
+        <div class="stat admin"><span>سهم ادمین</span><strong>${formatNumber(totalAdmin)} ؋</strong></div>
+        <div class="stat owner"><span>سهم صاحبان موتر</span><strong>${formatNumber(totalOwner)} ؋</strong></div>
+        <div class="stat"><span>تعداد ردیف‌ها</span><strong>${reportExpenses.length} ردیف</strong></div>
+      </div>
       <table>
         <thead><tr>
-          <th>#</th><th>از طرف کی</th><th>به کی</th><th>مقدار</th>
-          <th>تاریخ</th><th>توضیحات</th><th>موتر</th><th>ثبت توسط</th>
+          <th style="width:32px">#</th>
+          <th>از طرف کی</th><th>به کی</th>
+          <th style="width:100px">مقدار (؋)</th>
+          <th style="width:90px">تاریخ</th>
+          <th>توضیحات</th><th>موتر</th>
+          <th style="width:80px">سهم ادمین</th>
+          <th style="width:80px">سهم صاحب</th>
+          <th>ثبت توسط</th>
         </tr></thead>
-        <tbody>${rows}</tbody>
+        <tbody>
+          ${rows}
+          <tr class="totals-row">
+            <td colspan="3" style="text-align:center">مجموع کل</td>
+            <td style="direction:ltr;text-align:center">${formatNumber(totalAmount)} ؋</td>
+            <td colspan="3"></td>
+            <td style="direction:ltr;text-align:center">${formatNumber(totalAdmin)}</td>
+            <td style="direction:ltr;text-align:center">${formatNumber(totalOwner)}</td>
+            <td></td>
+          </tr>
+        </tbody>
       </table>
-      <p style="margin-top:16px;color:#6b7280;font-size:11px">مجموع ردیف‌های نمایش داده شده: ${expenses.length}</p>
+      <div class="footer-note">مجموع ردیف‌های این گزارش: ${reportExpenses.length} | دوره: ${periodLabel}</div>
       </body></html>`);
     win.document.close();
     win.print();
   };
 
-  // ── Input class ────────────────────────────────────────────────────────────
+  // ── Input helpers ──────────────────────────────────────────────────────────
 
   const inp = (field: string) =>
     `w-full px-3 py-2.5 rounded-xl input-golden text-sm ${errors[field] ? 'border-red-400 bg-red-50' : ''}`;
@@ -312,10 +454,47 @@ export default function ExpensesPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={handlePrint}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-amber-300 text-amber-700 text-sm hover:bg-amber-50 transition-colors">
-              <Printer className="w-4 h-4" />{t.printReport}
-            </button>
+
+            {/* ── Print Report with period dropdown ── */}
+            <div className="relative" ref={periodMenuRef}>
+              <div className="flex items-center rounded-xl border border-amber-300 overflow-hidden">
+                <button
+                  onClick={handlePrint}
+                  disabled={printLoading}
+                  className="flex items-center gap-2 px-3 py-2 text-amber-700 text-sm hover:bg-amber-50 transition-colors disabled:opacity-50"
+                >
+                  {printLoading
+                    ? <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                    : <Printer className="w-4 h-4" />}
+                  {t.printReport}
+                </button>
+                <div className="w-px h-6 bg-amber-200" />
+                <button
+                  onClick={() => setShowPeriodMenu(v => !v)}
+                  className="flex items-center gap-1 px-2 py-2 text-amber-600 text-xs hover:bg-amber-50 transition-colors"
+                >
+                  <span className="hidden sm:inline font-medium">{PERIOD_LABELS[reportPeriod]}</span>
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showPeriodMenu ? 'rotate-180' : ''}`} />
+                </button>
+              </div>
+
+              {showPeriodMenu && (
+                <div className="absolute left-0 top-full mt-1 w-44 bg-white rounded-xl border border-amber-200 shadow-xl z-50 overflow-hidden">
+                  {(Object.entries(PERIOD_LABELS) as [ReportPeriod, string][]).map(([key, label]) => (
+                    <button
+                      key={key}
+                      onClick={() => { setReportPeriod(key); setShowPeriodMenu(false); }}
+                      className={`w-full text-right px-4 py-2.5 text-sm hover:bg-amber-50 transition-colors flex items-center gap-2
+                        ${reportPeriod === key ? 'bg-amber-50 text-amber-700 font-semibold' : 'text-amber-800'}`}
+                    >
+                      {reportPeriod === key && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />}
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <button onClick={openAdd}
               className="btn-primary flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium">
               <Plus className="w-4 h-4" />{t.addExpense}
@@ -334,7 +513,6 @@ export default function ExpensesPage() {
         {/* ── Search + Filter Bar ─────────────────────────────────── */}
         <div className="card-golden rounded-2xl p-4 space-y-3">
           <div className="flex flex-wrap items-center gap-3">
-            {/* Search */}
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-500" />
               <input value={search} onChange={e => setSearch(e.target.value)}
@@ -347,19 +525,13 @@ export default function ExpensesPage() {
                 </button>
               )}
             </div>
-
-            {/* Filter toggle */}
             <button onClick={() => setShowFilters(!showFilters)}
               className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-colors ${showFilters ? 'bg-amber-500 text-white' : 'border border-amber-300 text-amber-700 hover:bg-amber-50'}`}>
               <Filter className="w-4 h-4" />
               {showFilters ? 'بستن فلتر' : t.filter}
-              {(dateFrom || dateTo) && !showFilters && (
-                <span className="w-2 h-2 rounded-full bg-red-500" />
-              )}
+              {(dateFrom || dateTo) && !showFilters && <span className="w-2 h-2 rounded-full bg-red-500" />}
             </button>
           </div>
-
-          {/* Expanded filters */}
           {showFilters && (
             <div className="flex flex-wrap items-end gap-3 pt-2 border-t border-amber-200/60">
               <div>
@@ -385,30 +557,26 @@ export default function ExpensesPage() {
         {/* ── Table ───────────────────────────────────────────────── */}
         <div className="card-golden rounded-2xl overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full table-golden min-w-[780px]">
+            <table className="w-full table-golden min-w-[820px]">
               <thead>
                 <tr>
                   <th className="px-4 py-3 text-right text-sm w-10">#</th>
-                  <th className="px-4 py-3 text-right text-sm cursor-pointer hover:text-amber-700 select-none"
-                    onClick={() => handleSort('fromWhom')}>
+                  <th className="px-4 py-3 text-right text-sm cursor-pointer hover:text-amber-700 select-none" onClick={() => handleSort('fromWhom')}>
                     {t.fromWhom}<SortIcon field="fromWhom" />
                   </th>
-                  <th className="px-4 py-3 text-right text-sm cursor-pointer hover:text-amber-700 select-none"
-                    onClick={() => handleSort('toWhom')}>
+                  <th className="px-4 py-3 text-right text-sm cursor-pointer hover:text-amber-700 select-none" onClick={() => handleSort('toWhom')}>
                     {t.toWhom}<SortIcon field="toWhom" />
                   </th>
-                  <th className="px-4 py-3 text-right text-sm cursor-pointer hover:text-amber-700 select-none"
-                    onClick={() => handleSort('amount')}>
+                  <th className="px-4 py-3 text-right text-sm cursor-pointer hover:text-amber-700 select-none" onClick={() => handleSort('amount')}>
                     {t.expenseAmount}<SortIcon field="amount" />
                   </th>
-                  <th className="px-4 py-3 text-right text-sm cursor-pointer hover:text-amber-700 select-none"
-                    onClick={() => handleSort('date')}>
+                  <th className="px-4 py-3 text-right text-sm cursor-pointer hover:text-amber-700 select-none" onClick={() => handleSort('date')}>
                     {t.expenseDate}<SortIcon field="date" />
                   </th>
                   <th className="px-4 py-3 text-right text-sm">{t.expenseDescription}</th>
                   <th className="px-4 py-3 text-right text-sm">{t.expenseRelatedCar}</th>
                   <th className="px-4 py-3 text-right text-sm">{t.expenseCreatedBy}</th>
-                  <th className="px-4 py-3 text-right text-sm w-20">{t.actions}</th>
+                  <th className="px-4 py-3 text-right text-sm w-28">{t.actions}</th>
                 </tr>
               </thead>
               <tbody>
@@ -433,9 +601,7 @@ export default function ExpensesPage() {
                   </tr>
                 ) : expenses.map((exp, i) => (
                   <tr key={exp.id} className="border-b border-amber-100 hover:bg-amber-50/40 transition-colors">
-                    <td className="px-4 py-3 text-sm text-amber-500">
-                      {(page - 1) * 20 + i + 1}
-                    </td>
+                    <td className="px-4 py-3 text-sm text-amber-500">{(page - 1) * 20 + i + 1}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
@@ -469,7 +635,7 @@ export default function ExpensesPage() {
                         {formatAfghanDate(exp.date)}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-amber-600 max-w-[160px] truncate">
+                    <td className="px-4 py-3 text-sm text-amber-600 max-w-[140px] truncate">
                       {exp.description || <span className="text-amber-300">—</span>}
                     </td>
                     <td className="px-4 py-3 text-sm text-amber-600">
@@ -480,6 +646,10 @@ export default function ExpensesPage() {
                     <td className="px-4 py-3 text-sm text-amber-600">{exp.createdBy}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
+                        <button onClick={() => setDetailExpense(exp)}
+                          className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors" title="مشاهده جزئیات">
+                          <Eye className="w-4 h-4" />
+                        </button>
                         <button onClick={() => openEdit(exp)}
                           className="p-1.5 rounded-lg text-amber-600 hover:bg-amber-100 transition-colors" title={t.edit}>
                           <Edit className="w-4 h-4" />
@@ -530,7 +700,9 @@ export default function ExpensesPage() {
         </div>
       </div>
 
-      {/* ── Add / Edit Modal ─────────────────────────────────────── */}
+      {/* ══════════════════════════════════════════════════════
+          Add / Edit Modal
+      ══════════════════════════════════════════════════════ */}
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
@@ -559,7 +731,7 @@ export default function ExpensesPage() {
             {errors.toWhom && <p className="text-red-500 text-xs mt-1">{errors.toWhom}</p>}
           </div>
 
-          {/* مقدار پول */}
+          {/* مقدار */}
           <div>
             <label className={lbl}>{t.expenseAmount} ({t.currency}) *</label>
             <input value={form.amount}
@@ -593,7 +765,7 @@ export default function ExpensesPage() {
             </select>
           </div>
 
-          {/* Created By — auto-filled, shown as read-only */}
+          {/* Created By */}
           <div>
             <label className={lbl}>{t.expenseCreatedBy}</label>
             <input
@@ -612,20 +784,70 @@ export default function ExpensesPage() {
               placeholder="توضیحات اضافی در مورد این مصرف..." />
           </div>
 
-          {/* ── 50/50 Split Preview ────────────────────────────────── */}
+          {/* ── Receipt Photo Upload ── */}
+          <div className="sm:col-span-2">
+            <label className={lbl}>رسید / فاکتور مصرف</label>
+            <div className="flex items-start gap-4">
+              {receiptPreview ? (
+                <div className="relative shrink-0">
+                  <img
+                    src={receiptPreview}
+                    alt="رسید"
+                    className="h-28 w-28 object-cover rounded-xl border-2 border-amber-200 shadow-sm cursor-zoom-in"
+                    onClick={() => setReceiptLightbox(receiptPreview)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => { setReceiptFile(null); setReceiptPreview(null); }}
+                    className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center shadow-md hover:bg-red-600 transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => receiptInputRef.current?.click()}
+                    className="absolute -bottom-2 -right-2 w-6 h-6 rounded-full bg-amber-500 text-white flex items-center justify-center shadow-md hover:bg-amber-600 transition-colors"
+                    title="تغییر تصویر"
+                  >
+                    <Camera className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => receiptInputRef.current?.click()}
+                  className="flex flex-col items-center justify-center w-28 h-28 rounded-xl border-2 border-dashed border-amber-300 bg-amber-50/60 hover:border-amber-500 hover:bg-amber-50 transition-all cursor-pointer shrink-0"
+                >
+                  <Camera className="w-6 h-6 text-amber-400 mb-1.5" />
+                  <span className="text-xs text-amber-600 font-medium text-center px-2">آپلود رسید</span>
+                </button>
+              )}
+              <div className="text-xs text-amber-500 space-y-1 mt-2">
+                <p className="font-medium text-amber-700">آپلود رسید / فاکتور مصرف</p>
+                <p>• فرمت مجاز: JPG, PNG, WEBP</p>
+                <p>• حداکثر حجم: 5MB</p>
+                <p>• اختیاری — برای مستندسازی مصرف</p>
+              </div>
+            </div>
+            <input
+              ref={receiptInputRef}
+              type="file"
+              accept="image/jpeg,image/jpg,image/png,image/webp"
+              className="hidden"
+              onChange={handleReceiptFile}
+            />
+          </div>
+
+          {/* ── 50/50 Split Preview ── */}
           {showSplitPreview && (
             <div className="sm:col-span-2">
               <div className="rounded-2xl overflow-hidden border-2 border-emerald-200 shadow-sm">
-                {/* Header */}
                 <div className="flex items-center gap-2 px-4 py-3"
                   style={{ background: 'linear-gradient(135deg,#059669,#047857)' }}>
                   <Scissors className="w-4 h-4 text-white" />
                   <h4 className="text-sm font-bold text-white">تقسیم خودکار مصرف (۵۰٪ / ۵۰٪)</h4>
                 </div>
-
-                {/* Cards */}
                 <div className="grid grid-cols-3 gap-0 divide-x divide-x-reverse divide-emerald-100 bg-white">
-                  {/* Total */}
                   <div className="p-4 text-center">
                     <div className="w-8 h-8 rounded-lg flex items-center justify-center mx-auto mb-2"
                       style={{ background: 'linear-gradient(135deg,#fef3c7,#fde68a)' }}>
@@ -635,8 +857,6 @@ export default function ExpensesPage() {
                     <p className="text-lg font-black text-gray-800" dir="ltr">{formatNumber(parsedModalAmount)}</p>
                     <p className="text-xs text-gray-400 mt-0.5">افغانی</p>
                   </div>
-
-                  {/* Admin share */}
                   <div className="p-4 text-center bg-amber-50/60">
                     <div className="w-8 h-8 rounded-lg flex items-center justify-center mx-auto mb-2"
                       style={{ background: 'linear-gradient(135deg,#fbbf24,#d97706)' }}>
@@ -646,8 +866,6 @@ export default function ExpensesPage() {
                     <p className="text-lg font-black text-amber-900" dir="ltr">{formatNumber(splitAdminShare)}</p>
                     <p className="text-xs text-amber-500 mt-0.5">افغانی</p>
                   </div>
-
-                  {/* Owner share */}
                   <div className="p-4 text-center bg-teal-50/60">
                     <div className="w-8 h-8 rounded-lg flex items-center justify-center mx-auto mb-2"
                       style={{ background: 'linear-gradient(135deg,#0d9488,#0f766e)' }}>
@@ -658,8 +876,6 @@ export default function ExpensesPage() {
                     <p className="text-xs text-teal-500 mt-0.5">افغانی</p>
                   </div>
                 </div>
-
-                {/* Footer */}
                 <div className={`px-4 py-2.5 flex items-center gap-2 text-xs font-medium ${carHasOwner ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
                   <span className={`w-2 h-2 rounded-full shrink-0 ${carHasOwner ? 'bg-emerald-500' : 'bg-amber-400'}`} />
                   {carHasOwner
@@ -681,12 +897,161 @@ export default function ExpensesPage() {
         </div>
       </Modal>
 
+      {/* ══════════════════════════════════════════════════════
+          Expense Detail Modal
+      ══════════════════════════════════════════════════════ */}
+      {detailExpense && (
+        <Modal
+          open={!!detailExpense}
+          onClose={() => setDetailExpense(null)}
+          title="جزئیات مصرف"
+          size="lg"
+        >
+          <div className="space-y-5">
+
+            {/* Header summary */}
+            <div className="flex items-center justify-between p-4 rounded-2xl"
+              style={{ background: 'linear-gradient(135deg,#fef3c7,#fde68a)' }}>
+              <div>
+                <p className="text-xs text-amber-600 font-medium mb-0.5">مجموع مصرف</p>
+                <p className="text-3xl font-black text-amber-900" dir="ltr">
+                  {formatNumber(detailExpense.amount)} <span className="text-lg font-normal">افغانی</span>
+                </p>
+              </div>
+              <div className="text-right">
+                <div className="flex items-center gap-1.5 text-sm text-amber-700 mb-1">
+                  <Calendar className="w-4 h-4" />
+                  {formatAfghanDate(detailExpense.date)}
+                </div>
+                <div className="flex items-center gap-1.5 text-xs text-amber-600">
+                  <User className="w-3.5 h-3.5" />
+                  ثبت توسط: {detailExpense.createdBy}
+                </div>
+              </div>
+            </div>
+
+            {/* Main info table */}
+            <div className="rounded-2xl border border-amber-200 overflow-hidden">
+              <table className="w-full text-sm">
+                <tbody>
+                  {[
+                    { label: 'از طرف کی', value: detailExpense.fromWhom, icon: '👤' },
+                    { label: 'به کی', value: detailExpense.toWhom, icon: '👤' },
+                    { label: 'مقدار', value: `${formatNumber(detailExpense.amount)} افغانی`, icon: '💰', ltr: true },
+                    { label: 'تاریخ', value: formatAfghanDate(detailExpense.date), icon: '📅' },
+                    { label: 'موتر مرتبط', value: detailExpense.car ? `${detailExpense.car.carName} (${detailExpense.car.plateNumber})` : '—', icon: '🚗' },
+                    { label: 'توضیحات', value: detailExpense.description || '—', icon: '📝' },
+                    { label: 'ثبت توسط', value: detailExpense.createdBy, icon: '👔' },
+                  ].map((row, i) => (
+                    <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-amber-50/50'}>
+                      <td className="px-4 py-3 font-semibold text-amber-700 whitespace-nowrap border-b border-amber-100 w-36">
+                        <span className="mr-1">{row.icon}</span> {row.label}
+                      </td>
+                      <td className={`px-4 py-3 text-amber-900 border-b border-amber-100 ${row.ltr ? 'dir-ltr text-left' : ''}`}>
+                        {row.value}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Cost split breakdown */}
+            {detailExpense.carId && (detailExpense.adminShare > 0 || detailExpense.ownerShare > 0) && (
+              <div>
+                <p className="text-xs font-bold text-amber-700 uppercase tracking-wider mb-2 flex items-center gap-2">
+                  <span className="w-4 h-0.5 bg-amber-400 inline-block" />
+                  تقسیم مصرف (۵۰٪ / ۵۰٪)
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-amber-50 border border-amber-200">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-amber-600" />
+                      <span className="text-sm font-semibold text-amber-800">سهم ادمین</span>
+                    </div>
+                    <span className="font-bold text-amber-900 text-sm" dir="ltr">{formatNumber(detailExpense.adminShare)} ؋</span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-teal-50 border border-teal-200">
+                    <div className="flex items-center gap-2">
+                      <UserCheck className="w-4 h-4 text-teal-600" />
+                      <span className="text-sm font-semibold text-teal-800">سهم صاحب موتر</span>
+                    </div>
+                    <span className="font-bold text-teal-900 text-sm" dir="ltr">{formatNumber(detailExpense.ownerShare)} ؋</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Receipt Photo */}
+            {detailExpense.receiptPhoto && (
+              <div>
+                <p className="text-xs font-bold text-amber-700 uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <span className="w-4 h-0.5 bg-amber-400 inline-block" />
+                  رسید / فاکتور مصرف
+                </p>
+                <div
+                  className="relative group cursor-zoom-in rounded-2xl overflow-hidden border-2 border-amber-200 shadow-sm"
+                  onClick={() => setReceiptLightbox(imgUrl(detailExpense.receiptPhoto)!)}
+                >
+                  <img
+                    src={imgUrl(detailExpense.receiptPhoto)!}
+                    alt="رسید مصرف"
+                    className="w-full max-h-72 object-contain bg-amber-50 group-hover:opacity-90 transition-opacity"
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/10">
+                    <div className="w-10 h-10 rounded-full bg-white/90 shadow flex items-center justify-center">
+                      <ZoomIn className="w-5 h-5 text-amber-700" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => { setDetailExpense(null); openEdit(detailExpense); }}
+                className="flex-1 flex items-center justify-center gap-2 btn-secondary py-2.5 rounded-xl text-sm font-medium"
+              >
+                <Edit className="w-4 h-4" /> ویرایش
+              </button>
+              <button
+                onClick={() => setDetailExpense(null)}
+                className="flex-1 btn-primary py-2.5 rounded-xl text-sm font-medium"
+              >
+                بستن
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {/* ── Delete Confirm ───────────────────────────────────────── */}
       <ConfirmDialog
         open={!!deleteId}
         onClose={() => setDeleteId(null)}
         onConfirm={() => handleDelete(deleteId!)}
         message="آیا از حذف این مصرف مطمئن هستید؟ این عملیات قابل بازگشت نیست." />
+
+      {/* ── Receipt Lightbox ─────────────────────────────────────── */}
+      {receiptLightbox && (
+        <div
+          className="fixed inset-0 z-[9999] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setReceiptLightbox(null)}
+        >
+          <button
+            className="absolute top-4 right-4 w-9 h-9 rounded-xl bg-white/10 hover:bg-white/25 flex items-center justify-center text-white transition-colors"
+            onClick={() => setReceiptLightbox(null)}
+          >
+            <X className="w-5 h-5" />
+          </button>
+          <img
+            src={receiptLightbox}
+            alt="رسید مصرف"
+            className="max-w-full max-h-[90vh] object-contain rounded-xl shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          />
+        </div>
+      )}
     </MainLayout>
   );
 }

@@ -129,8 +129,14 @@ export const expensesAPI = {
   getStats: () => api.get('/expenses/stats'),
   getAll: (params?: any) => api.get('/expenses', { params }),
   getById: (id: string) => api.get(`/expenses/${id}`),
-  create: (data: any) => api.post('/expenses', data),
-  update: (id: string, data: any) => api.put(`/expenses/${id}`, data),
+  create: (data: FormData | any) =>
+    data instanceof FormData
+      ? api.post('/expenses', data, { headers: { 'Content-Type': 'multipart/form-data' } })
+      : api.post('/expenses', data),
+  update: (id: string, data: FormData | any) =>
+    data instanceof FormData
+      ? api.put(`/expenses/${id}`, data, { headers: { 'Content-Type': 'multipart/form-data' } })
+      : api.put(`/expenses/${id}`, data),
   delete: (id: string) => api.delete(`/expenses/${id}`),
 };
 

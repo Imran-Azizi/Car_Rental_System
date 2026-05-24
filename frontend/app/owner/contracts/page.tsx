@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ownerPortalAPI } from '@/lib/api';
-import { FileText, Search, Filter, ChevronDown, ChevronUp, CreditCard } from 'lucide-react';
+import { FileText, Search, Filter, ChevronDown, ChevronUp, CreditCard, CalendarClock, Lock, Info } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { formatAfghanDate, formatCurrency } from '@/lib/utils';
 
@@ -95,14 +95,21 @@ export default function OwnerContractsPage() {
           {contracts.map((c) => {
             const sc = statusConfig[c.status] || statusConfig.ACTIVE;
             const isExpanded = expandedId === c.id;
+            const isActive = c.status === 'ACTIVE';
             const totalPaid = c.payments?.reduce((sum: number, p: any) => sum + p.amount, 0) || 0;
 
             return (
-              <div key={c.id} className="rounded-2xl border border-amber-100 bg-white overflow-hidden hover:shadow-sm transition-shadow">
+              <div key={c.id} className={`rounded-2xl overflow-hidden hover:shadow-sm transition-shadow ${
+                isActive
+                  ? 'border-2 border-blue-200 bg-blue-50/30'
+                  : 'border border-amber-100 bg-white'
+              }`}>
                 {/* Main row */}
                 <button
-                  onClick={() => setExpandedId(isExpanded ? null : c.id)}
-                  className="w-full px-5 py-4 flex items-center gap-4 text-right hover:bg-amber-50/30 transition-colors">
+                  onClick={() => !isActive && setExpandedId(isExpanded ? null : c.id)}
+                  className={`w-full px-5 py-4 flex items-center gap-4 text-right transition-colors ${
+                    isActive ? 'cursor-default' : 'hover:bg-amber-50/30 cursor-pointer'
+                  }`}>
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2 mb-1">
                       <span className="font-bold text-amber-900 text-sm">{c.contractNumber}</span>
@@ -111,33 +118,62 @@ export default function OwnerContractsPage() {
                         {sc.label}
                       </span>
                     </div>
-                    <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-amber-600">
-                      <span>موتر: {c.car?.carName} ({c.car?.plateNumber})</span>
-                      <span>مشتری: {c.customer?.fullName}</span>
+                    <div className="text-xs text-amber-600">
+                      موتر: {c.car?.carName} ({c.car?.plateNumber})
                     </div>
-                    <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-amber-500 mt-0.5">
-                      <span>{formatAfghanDate(c.startDate)} — {formatAfghanDate(c.endDate)}</span>
-                    </div>
-                  </div>
 
-                  <div className="text-right shrink-0">
-                    <p className="font-bold text-amber-900">{formatCurrency(c.totalRent)}</p>
-                    {c.remainingAmount > 0 ? (
-                      <p className="text-red-500 text-xs">باقی: {formatCurrency(c.remainingAmount)}</p>
-                    ) : (
-                      <p className="text-green-600 text-xs">پرداخت کامل</p>
+                    {/* Booking period — always visible */}
+                    <div className="flex items-center gap-1.5 mt-1.5 text-xs font-medium"
+                      style={{ color: isActive ? '#1d4ed8' : '#78716c' }}>
+                      <CalendarClock className="w-3.5 h-3.5 shrink-0" />
+                      {formatAfghanDate(c.startDate)} — {formatAfghanDate(c.endDate)}
+                    </div>
+
+                    {/* Customer — only after return */}
+                    {!isActive && c.customer?.fullName && (
+                      <p className="text-amber-500 text-xs mt-0.5">مشتری: {c.customer.fullName}</p>
                     )}
                   </div>
 
-                  {isExpanded ? (
-                    <ChevronUp className="w-5 h-5 text-amber-400 shrink-0" />
+                  {isActive ? (
+                    /* ── ACTIVE: locked badge ── */
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium shrink-0"
+                      style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' }}>
+                      <Lock className="w-3.5 h-3.5" />
+                      اطلاعات پس از برگشت
+                    </div>
                   ) : (
-                    <ChevronDown className="w-5 h-5 text-amber-400 shrink-0" />
+                    <>
+                      <div className="text-right shrink-0">
+                        <p className="font-bold text-amber-900">{formatCurrency(c.totalRent)}</p>
+                        {(c.remainingAmount ?? 0) > 0 ? (
+                          <p className="text-red-500 text-xs">باقی: {formatCurrency(c.remainingAmount)}</p>
+                        ) : (
+                          <p className="text-green-600 text-xs">پرداخت کامل</p>
+                        )}
+                      </div>
+                      {isExpanded ? (
+                        <ChevronUp className="w-5 h-5 text-amber-400 shrink-0" />
+                      ) : (
+                        <ChevronDown className="w-5 h-5 text-amber-400 shrink-0" />
+                      )}
+                    </>
                   )}
                 </button>
 
-                {/* Expanded Detail */}
-                {isExpanded && (
+                {/* ACTIVE — restricted notice */}
+                {isActive && (
+                  <div className="mx-5 mb-4 flex items-start gap-2 px-4 py-3 rounded-xl text-xs"
+                    style={{ background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1e40af' }}>
+                    <Info className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>
+                      موتر در حال کرایه است. جزئیات مالی و اطلاعات مشتری پس از برگشت موتر نمایش داده می‌شود.
+                    </span>
+                  </div>
+                )}
+
+                {/* Expanded Detail — only for non-active contracts */}
+                {!isActive && isExpanded && (
                   <div className="px-5 pb-4 border-t border-amber-50">
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-4 mb-4">
                       <div className="p-3 rounded-xl text-xs" style={{ background: '#fef9f0', border: '1px solid #fde68a' }}>

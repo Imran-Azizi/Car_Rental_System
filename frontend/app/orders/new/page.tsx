@@ -8,8 +8,10 @@ import { parseNum, numericInputHandler, formatNumber } from '@/lib/utils';
 import {
   Car, User, Shield, Receipt, FileImage, Pencil,
   Check, ChevronLeft, ChevronRight,
-  Search, X, AlertCircle, CheckCircle2, Camera, Upload,
+  Search, X, AlertCircle, CheckCircle2, Camera, Upload, UserCheck, Printer,
 } from 'lucide-react';
+import ContractBill, { BillData } from '@/components/ContractBill';
+import CustomerBill, { CustomerBillData } from '@/components/CustomerBill';
 import toast from 'react-hot-toast';
 
 /* ─── types ─── */
@@ -63,7 +65,7 @@ function Field({ label, required, error, children }: { label: string; required?:
   );
 }
 
-/* ─── Document upload slot ─── */
+/* ─── Single document upload slot ─── */
 interface DocSlotProps {
   label: string;
   sublabel?: string;
@@ -133,6 +135,123 @@ function DocSlot({ label, sublabel, preview, onFile, onClear, color = '#f59e0b' 
   );
 }
 
+/* ─── Multi-file upload slot (single field, multiple images) ─── */
+interface MultiDocSlotProps {
+  label: string;
+  sublabel?: string;
+  files: (File | null)[];
+  previews: (string | null)[];
+  maxFiles: number;
+  onFilesChange: (files: (File | null)[], previews: (string | null)[]) => void;
+  color?: string;
+}
+function MultiDocSlot({ label, sublabel, files, previews, maxFiles, onFilesChange, color = '#f59e0b' }: MultiDocSlotProps) {
+  const ref = useRef<HTMLInputElement>(null);
+  const filledCount = previews.filter(Boolean).length;
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(e.target.files || []);
+    const available = maxFiles - filledCount;
+    const toAdd = selected.slice(0, available);
+    const oversized = toAdd.filter(f => f.size > 5 * 1024 * 1024);
+    if (oversized.length) { toast.error('یک یا چند فایل بیشتر از 5MB است'); return; }
+    const newFiles = [...files];
+    const newPreviews = [...previews];
+    let slot = 0;
+    for (const f of toAdd) {
+      while (slot < maxFiles && newFiles[slot]) slot++;
+      if (slot >= maxFiles) break;
+      newFiles[slot] = f;
+      newPreviews[slot] = URL.createObjectURL(f);
+      slot++;
+    }
+    onFilesChange(newFiles, newPreviews);
+    e.target.value = '';
+  };
+
+  const removeAt = (idx: number) => {
+    const newFiles = [...files];
+    const newPreviews = [...previews];
+    if (newPreviews[idx] && newPreviews[idx]!.startsWith('blob:')) URL.revokeObjectURL(newPreviews[idx]!);
+    newFiles[idx] = null;
+    newPreviews[idx] = null;
+    onFilesChange(newFiles, newPreviews);
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div>
+        <p className="text-xs font-semibold text-amber-800">{label}</p>
+        {sublabel && <p className="text-xs text-amber-500 mt-0.5">{sublabel}</p>}
+      </div>
+
+      <div className="rounded-xl border-2 border-dashed p-3 space-y-3"
+        style={{ borderColor: filledCount > 0 ? '#6ee7b7' : `${color}60`, background: filledCount > 0 ? '#f0fdf4' : `${color}08` }}>
+
+        {/* Uploaded thumbnails */}
+        {filledCount > 0 && (
+          <div className="flex gap-2 flex-wrap">
+            {previews.map((prev, idx) => prev ? (
+              <div key={idx} className="relative group shrink-0">
+                <img
+                  src={prev}
+                  alt={`تصویر ${idx + 1}`}
+                  className="w-20 h-20 object-cover rounded-lg border-2 border-green-300 shadow-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeAt(idx)}
+                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center shadow opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+                <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-center rounded-b-lg text-xs py-0.5">
+                  {idx + 1}
+                </div>
+              </div>
+            ) : null)}
+          </div>
+        )}
+
+        {/* Upload trigger */}
+        {filledCount < maxFiles && (
+          <button
+            type="button"
+            onClick={() => ref.current?.click()}
+            className="w-full flex flex-col items-center justify-center gap-2 py-4 rounded-xl border border-dashed transition-all hover:opacity-80"
+            style={{ borderColor: color, background: `${color}10` }}
+          >
+            <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: `${color}25` }}>
+              <Upload className="w-4 h-4" style={{ color }} />
+            </div>
+            <p className="text-xs font-semibold" style={{ color }}>
+              {filledCount === 0
+                ? `انتخاب تصویر (تا ${maxFiles} فایل)`
+                : `افزودن تصویر (${filledCount}/${maxFiles})`}
+            </p>
+            <p className="text-xs text-amber-400">JPG, PNG, WEBP • حداکثر 5MB هر فایل</p>
+          </button>
+        )}
+
+        {filledCount >= maxFiles && (
+          <p className="text-center text-xs text-green-600 font-medium py-1">
+            ✓ {maxFiles} تصویر آپلود شد
+          </p>
+        )}
+      </div>
+
+      <input
+        ref={ref}
+        type="file"
+        accept="image/jpeg,image/jpg,image/png,image/webp"
+        multiple
+        className="hidden"
+        onChange={handleChange}
+      />
+    </div>
+  );
+}
+
 /* ═══════════════════════════════════════════════════
    PAGE
 ═══════════════════════════════════════════════════ */
@@ -157,22 +276,35 @@ export default function OrderNewPage() {
   /* ── Step 2: Guarantor ── */
   const [guarantor, setGuarantor] = useState(initGuarantor);
 
-  /* ── Step 3: Billing ── */
+  /* ── Step 3: Driver ── */
+  const [driverName, setDriverName]       = useState('');
+  const [driverLicense, setDriverLicense] = useState('');
+  const [driverPhone, setDriverPhone]     = useState('');
+
+  /* ── Step 4: Billing ── */
   const [dailyRentInput, setDailyRentInput]   = useState('');
   const [receivedAmount, setReceivedAmount]   = useState('');
   const [billingErrors, setBillingErrors]     = useState<FormErrors>({});
 
-  /* ── Step 4: Documents ── */
+  /* ── Step 5: Documents ── */
   const [customerPhoto, setCustomerPhoto]       = useState<File | null>(null);
   const [customerPhotoPreview, setCustomerPhotoPreview] = useState<string | null>(null);
   const [guarantorPhoto, setGuarantorPhoto]     = useState<File | null>(null);
   const [guarantorPhotoPreview, setGuarantorPhotoPreview] = useState<string | null>(null);
+  const [guarantorPhoto2, setGuarantorPhoto2]   = useState<File | null>(null);
+  const [guarantorPhoto2Preview, setGuarantorPhoto2Preview] = useState<string | null>(null);
   const [billDocPhoto, setBillDocPhoto]         = useState<File | null>(null);
   const [billDocPhotoPreview, setBillDocPhotoPreview] = useState<string | null>(null);
   const [tazkiraDocPhoto, setTazkiraDocPhoto]   = useState<File | null>(null);
   const [tazkiraDocPhotoPreview, setTazkiraDocPhotoPreview] = useState<string | null>(null);
+  const [tazkiraDocPhoto2, setTazkiraDocPhoto2] = useState<File | null>(null);
+  const [tazkiraDocPhoto2Preview, setTazkiraDocPhoto2Preview] = useState<string | null>(null);
 
   const [saving, setSaving] = useState(false);
+
+  /* ── Bill preview overlays ── */
+  const [previewAdminBill,    setPreviewAdminBill]    = useState(false);
+  const [previewCustomerBill, setPreviewCustomerBill] = useState(false);
 
   /* ── Draft system ── */
   const [draftId, setDraftId]           = useState<string | null>(null);
@@ -207,6 +339,7 @@ export default function OrderNewPage() {
       selectedCarId,
       customer,
       guarantor,
+      driverName, driverLicense, driverPhone,
       dailyRentInput,
       receivedAmount,
     },
@@ -235,7 +368,7 @@ export default function OrderNewPage() {
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(() => saveDraft(true), 3000);
     return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
-  }, [step, selectedCarId, customer, guarantor, dailyRentInput, receivedAmount, token, draftEnabled]);
+  }, [step, selectedCarId, customer, guarantor, driverName, driverLicense, driverPhone, dailyRentInput, receivedAmount, token, draftEnabled]);
 
   /* ─── Load draft from URL param ─── */
   useEffect(() => {
@@ -248,9 +381,12 @@ export default function OrderNewPage() {
       setDraftId(d.id);
       setStep(d.step || 0);
       const fd = d.formData as any;
-      if (fd.selectedCarId) setSelectedCarId(fd.selectedCarId);
-      if (fd.customer)      setCustomer(fd.customer);
-      if (fd.guarantor)     setGuarantor(fd.guarantor);
+      if (fd.selectedCarId)  setSelectedCarId(fd.selectedCarId);
+      if (fd.customer)       setCustomer(fd.customer);
+      if (fd.guarantor)      setGuarantor(fd.guarantor);
+      if (fd.driverName)     setDriverName(fd.driverName);
+      if (fd.driverLicense)  setDriverLicense(fd.driverLicense);
+      if (fd.driverPhone)    setDriverPhone(fd.driverPhone);
       if (fd.dailyRentInput) setDailyRentInput(fd.dailyRentInput);
       if (fd.receivedAmount) setReceivedAmount(fd.receivedAmount);
       setShowDraftBanner(true);
@@ -303,13 +439,18 @@ export default function OrderNewPage() {
           notes:          c.guarantor.notes          || '',
         });
       }
+      setDriverName(c.driverName || '');
+      setDriverLicense(c.driverLicense || '');
+      setDriverPhone(c.driverPhone || '');
       setDailyRentInput(String(c.rentPrice   || ''));
       setReceivedAmount(String(c.advancePayment || ''));
       const imgUrl = (p: string | null) => p ? `${API_BASE}${p}` : null;
-      const cp = imgUrl(c.customer?.photo);   if (cp) setCustomerPhotoPreview(cp);
-      const gp = imgUrl(c.guarantor?.photo);  if (gp) setGuarantorPhotoPreview(gp);
-      const bp = imgUrl(c.billDocPhoto);      if (bp) setBillDocPhotoPreview(bp);
-      const tp = imgUrl(c.tazkiraDocPhoto);   if (tp) setTazkiraDocPhotoPreview(tp);
+      const cp  = imgUrl(c.customer?.photo);     if (cp)  setCustomerPhotoPreview(cp);
+      const gp  = imgUrl(c.guarantor?.photo);    if (gp)  setGuarantorPhotoPreview(gp);
+      const gp2 = imgUrl(c.guarantor?.photo2);   if (gp2) setGuarantorPhoto2Preview(gp2);
+      const bp  = imgUrl(c.billDocPhoto);        if (bp)  setBillDocPhotoPreview(bp);
+      const tp  = imgUrl(c.tazkiraDocPhoto);     if (tp)  setTazkiraDocPhotoPreview(tp);
+      const tp2 = imgUrl(c.tazkiraDocPhoto2);    if (tp2) setTazkiraDocPhoto2Preview(tp2);
     }).catch(() => toast.error(lang === 'dari' ? 'خطا در بارگذاری سفارش' : 'د سفارش بارولو کې تیروتنه'));
   }, [token]);
 
@@ -424,27 +565,18 @@ export default function OrderNewPage() {
       /* 2 — Create guarantor (optional) */
       let guarantorId: string | undefined;
       if (guarantor.fullName.trim()) {
-        let guarRes;
-        if (guarantorPhoto) {
-          const fd = new FormData();
-          Object.entries({
-            fullName: guarantor.fullName, fatherName: guarantor.fatherName,
-            tazkiraNumber: guarantor.tazkiraNumber, phoneNumber: guarantor.phoneNumber,
-            province: guarantor.province, district: guarantor.district,
-            currentAddress: guarantor.currentAddress, relationship: guarantor.relationship,
-            notes: guarantor.notes,
-          }).forEach(([k, v]) => v && fd.append(k, v));
-          fd.append('photo', guarantorPhoto);
-          guarRes = await guarantorsAPI.create(fd);
-        } else {
-          guarRes = await guarantorsAPI.create({
-            fullName: guarantor.fullName, fatherName: guarantor.fatherName,
-            tazkiraNumber: guarantor.tazkiraNumber, phoneNumber: guarantor.phoneNumber,
-            province: guarantor.province, district: guarantor.district,
-            currentAddress: guarantor.currentAddress, relationship: guarantor.relationship,
-            notes: guarantor.notes,
-          });
-        }
+        const guarData = {
+          fullName: guarantor.fullName, fatherName: guarantor.fatherName,
+          tazkiraNumber: guarantor.tazkiraNumber, phoneNumber: guarantor.phoneNumber,
+          province: guarantor.province, district: guarantor.district,
+          currentAddress: guarantor.currentAddress, relationship: guarantor.relationship,
+          notes: guarantor.notes,
+        };
+        const fd = new FormData();
+        Object.entries(guarData).forEach(([k, v]) => v && fd.append(k, v));
+        if (guarantorPhoto)  fd.append('photo',  guarantorPhoto);
+        if (guarantorPhoto2) fd.append('photo2', guarantorPhoto2);
+        const guarRes = await guarantorsAPI.create(fd);
         guarantorId = guarRes.data.data.id;
       }
 
@@ -453,8 +585,6 @@ export default function OrderNewPage() {
       const endTime   = customer.endTime   || '00:00';
       const advance   = received;
 
-      const hasDocs = billDocPhoto || tazkiraDocPhoto;
-      let contractRes;
       const contractBase: Record<string, any> = {
         carId: selectedCarId, customerId,
         startDate: new Date(customer.startDate).toISOString(), startTime,
@@ -465,13 +595,19 @@ export default function OrderNewPage() {
         remainingAmount: remaining,
         carStatus: 'خوب', agreementConfirmed: true,
         notes: customer.notes,
-        ...(guarantorId && { guarantorId }),
+        ...(guarantorId    && { guarantorId }),
+        ...(driverName     && { driverName }),
+        ...(driverLicense  && { driverLicense }),
+        ...(driverPhone    && { driverPhone }),
       };
+      let contractRes;
+      const hasDocs = billDocPhoto || tazkiraDocPhoto || tazkiraDocPhoto2;
       if (hasDocs) {
         const fd = new FormData();
         Object.entries(contractBase).forEach(([k, v]) => fd.append(k, String(v)));
-        if (billDocPhoto)    fd.append('billDocPhoto',    billDocPhoto);
-        if (tazkiraDocPhoto) fd.append('tazkiraDocPhoto', tazkiraDocPhoto);
+        if (billDocPhoto)     fd.append('billDocPhoto',     billDocPhoto);
+        if (tazkiraDocPhoto)  fd.append('tazkiraDocPhoto',  tazkiraDocPhoto);
+        if (tazkiraDocPhoto2) fd.append('tazkiraDocPhoto2', tazkiraDocPhoto2);
         contractRes = await ordersAPI.create(fd);
       } else {
         contractRes = await ordersAPI.create(contractBase);
@@ -511,9 +647,37 @@ export default function OrderNewPage() {
         guarantorCurrentAddress: guarantor.currentAddress,
         guarantorTazkira:        guarantor.tazkiraNumber,
         guarantorPhone:          guarantor.phoneNumber,
+        driverName:              driverName  || undefined,
+        driverLicense:           driverLicense || undefined,
+        driverPhone:             driverPhone || undefined,
         notes:                   customer.notes,
       };
       localStorage.setItem('lastOrderBill', JSON.stringify(billData));
+
+      /* Also store customer bill data for print page */
+      const customerBillData: CustomerBillData = {
+        billNumber:     contract.contractNumber,
+        startDate:      customer.startDate,
+        endDate:        customer.endDate,
+        startTime:      customer.startTime,
+        endTime:        customer.endTime,
+        carType:        [selectedCar?.carName, selectedCar?.model].filter(Boolean).join(' — '),
+        plateNumber:    selectedCar?.plateNumber,
+        customerName:   customer.fullName,
+        customerPhone:  customer.phoneNumber,
+        guarantorName:  guarantor.fullName  || undefined,
+        guarantorPhone: guarantor.phoneNumber || undefined,
+        driverName:     driverName    || undefined,
+        driverPhone:    driverPhone   || undefined,
+        notes:          customer.notes || undefined,
+        rentalDays,
+        dailyRate:      dailyRent,
+        totalRent,
+        received:       advance,
+        remaining,
+      };
+      localStorage.setItem('lastCustomerBill', JSON.stringify(customerBillData));
+
       // Delete draft from server after successful submission
       if (draftId) { draftsAPI.delete(draftId).catch(() => {}); }
       toast.success(lang === 'dari' ? 'سفارش موفقانه ثبت شد!' : 'سفارش بریالیتوب سره ثبت شو!');
@@ -556,20 +720,15 @@ export default function OrderNewPage() {
           currentAddress: guarantor.currentAddress, relationship: guarantor.relationship,
           notes: guarantor.notes,
         };
+        const fd = new FormData();
+        Object.entries(guarData).forEach(([k, v]) => v && fd.append(k, v));
+        if (guarantorPhoto)  fd.append('photo',  guarantorPhoto);
+        if (guarantorPhoto2) fd.append('photo2', guarantorPhoto2);
         if (finalGuarantorId) {
-          if (guarantorPhoto) {
-            const fd = new FormData();
-            Object.entries(guarData).forEach(([k, v]) => v && fd.append(k, v));
-            fd.append('photo', guarantorPhoto);
-            await guarantorsAPI.update(finalGuarantorId, fd);
-          } else {
-            await guarantorsAPI.update(finalGuarantorId, guarData);
-          }
+          await guarantorsAPI.update(finalGuarantorId, fd);
         } else {
-          const guarRes = guarantorPhoto
-            ? (() => { const fd = new FormData(); Object.entries(guarData).forEach(([k, v]) => v && fd.append(k, v)); fd.append('photo', guarantorPhoto); return guarantorsAPI.create(fd); })()
-            : guarantorsAPI.create(guarData);
-          finalGuarantorId = (await guarRes).data.data.id;
+          const guarRes = await guarantorsAPI.create(fd);
+          finalGuarantorId = guarRes.data.data.id;
         }
       }
 
@@ -582,13 +741,17 @@ export default function OrderNewPage() {
         rentPrice: dailyRent, totalRent, advancePayment: advance, remainingAmount: remaining,
         carStatus: 'خوب', agreementConfirmed: true, notes: customer.notes,
         ...(finalGuarantorId && { guarantorId: finalGuarantorId }),
+        ...(driverName     && { driverName }),
+        ...(driverLicense  && { driverLicense }),
+        ...(driverPhone    && { driverPhone }),
       };
-      const hasDocs = billDocPhoto || tazkiraDocPhoto;
+      const hasDocs = billDocPhoto || tazkiraDocPhoto || tazkiraDocPhoto2;
       if (hasDocs) {
         const fd = new FormData();
         Object.entries(contractBase).forEach(([k, v]) => fd.append(k, String(v)));
-        if (billDocPhoto)    fd.append('billDocPhoto',    billDocPhoto);
-        if (tazkiraDocPhoto) fd.append('tazkiraDocPhoto', tazkiraDocPhoto);
+        if (billDocPhoto)     fd.append('billDocPhoto',     billDocPhoto);
+        if (tazkiraDocPhoto)  fd.append('tazkiraDocPhoto',  tazkiraDocPhoto);
+        if (tazkiraDocPhoto2) fd.append('tazkiraDocPhoto2', tazkiraDocPhoto2);
         await ordersAPI.update(editId!, fd);
       } else {
         await ordersAPI.update(editId!, contractBase);
@@ -605,14 +768,76 @@ export default function OrderNewPage() {
 
   /* ─── Step definitions ─── */
   const steps = [
-    { label: lang === 'dari' ? 'انتخاب موتر'    : 'موتر غوره کول',       icon: Car },
-    { label: lang === 'dari' ? 'معلومات مشتری'  : 'د مشتري معلومات',    icon: User },
-    { label: lang === 'dari' ? 'معلومات ضامن'   : 'د ضامن معلومات',     icon: Shield },
-    { label: lang === 'dari' ? 'محاسبه مالی'    : 'مالي حساب',          icon: Receipt },
-    { label: lang === 'dari' ? 'اسناد و تأیید'  : 'اسناد او تایید',     icon: FileImage },
+    { label: lang === 'dari' ? 'انتخاب موتر'    : 'موتر غوره کول',    icon: Car },
+    { label: lang === 'dari' ? 'معلومات مشتری'  : 'د مشتري معلومات', icon: User },
+    { label: lang === 'dari' ? 'معلومات ضامن'   : 'د ضامن معلومات',  icon: Shield },
+    { label: lang === 'dari' ? 'معلومات راننده' : 'د دریور معلومات', icon: UserCheck },
+    { label: lang === 'dari' ? 'محاسبه مالی'    : 'مالي حساب',       icon: Receipt },
+    { label: lang === 'dari' ? 'اسناد و ثبت'    : 'اسناد او ثبت',    icon: FileImage },
   ];
 
   const fmtCur = (n: number) => `${formatNumber(n)} ${lang === 'dari' ? 'افغانی' : 'افغاني'}`;
+
+  /* ── Build admin bill preview data ── */
+  const buildAdminBillPreview = (): BillData => ({
+    contractNumber:          isEditMode ? '—' : lang === 'dari' ? 'پیش‌نویس' : 'مسوده',
+    carName:                 selectedCar?.carName     || '',
+    model:                   selectedCar?.model       || '',
+    color:                   selectedCar?.color       || '',
+    plateNumber:             selectedCar?.plateNumber || '',
+    dailyRate:               dailyRent,
+    totalRent,
+    advancePayment:          received,
+    remainingAmount:         remaining,
+    startDate:               customer.startDate || new Date().toISOString().split('T')[0],
+    startTime:               customer.startTime || '00:00',
+    endDate:                 customer.endDate   || new Date().toISOString().split('T')[0],
+    endTime:                 customer.endTime   || '00:00',
+    customerFullName:        customer.fullName,
+    customerFatherName:      customer.fatherName,
+    customerDistrict:        customer.district,
+    customerVillage:         customer.village,
+    customerProvince:        customer.province,
+    customerCurrentAddress:  customer.currentAddress,
+    customerTazkira:         customer.tazkiraNumber,
+    customerPhone:           customer.phoneNumber,
+    customerPhoto:           customerPhotoPreview || undefined,
+    guarantorFullName:       guarantor.fullName,
+    guarantorFatherName:     guarantor.fatherName,
+    guarantorDistrict:       guarantor.district,
+    guarantorVillage:        guarantor.district,
+    guarantorProvince:       guarantor.province,
+    guarantorCurrentAddress: guarantor.currentAddress,
+    guarantorTazkira:        guarantor.tazkiraNumber,
+    guarantorPhone:          guarantor.phoneNumber,
+    driverName:              driverName    || undefined,
+    driverLicense:           driverLicense || undefined,
+    driverPhone:             driverPhone   || undefined,
+    notes:                   customer.notes,
+  });
+
+  /* ── Build customer bill preview data ── */
+  const buildCustomerBillPreview = (): CustomerBillData => ({
+    billNumber:      isEditMode ? '—' : lang === 'dari' ? 'پیش‌نویس' : 'مسوده',
+    startDate:       customer.startDate || new Date().toISOString().split('T')[0],
+    endDate:         customer.endDate   || new Date().toISOString().split('T')[0],
+    startTime:       customer.startTime,
+    endTime:         customer.endTime,
+    carType:         [selectedCar?.carName, selectedCar?.model].filter(Boolean).join(' — '),
+    plateNumber:     selectedCar?.plateNumber,
+    customerName:    customer.fullName,
+    customerPhone:   customer.phoneNumber,
+    guarantorName:   guarantor.fullName  || undefined,
+    guarantorPhone:  guarantor.phoneNumber || undefined,
+    driverName:      driverName    || undefined,
+    driverPhone:     driverPhone   || undefined,
+    notes:           customer.notes || undefined,
+    rentalDays,
+    dailyRate:       dailyRent,
+    totalRent,
+    received,
+    remaining,
+  });
 
   /* ═══ RENDER ═══ */
   return (
@@ -926,265 +1151,191 @@ export default function OrderNewPage() {
             </div>
           )}
 
-          {/* ═══ STEP 3: Billing ═══ */}
+          {/* ═══ STEP 3: Driver Info ═══ */}
           {step === 3 && (
             <div className="space-y-5">
+              <StepHeader icon={UserCheck} title={lang === 'dari' ? 'معلومات راننده (اختیاری)' : 'د دریور معلومات (اختیاري)'} gradient="linear-gradient(135deg,#0891b2,#0e7490)" />
+              <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 text-sm text-blue-700">
+                {lang === 'dari'
+                  ? 'اگر موتر توسط راننده جداگانه‌ای استفاده می‌شود، معلومات راننده را وارد کنید. در غیر این صورت می‌توانید این مرحله را رد کنید.'
+                  : 'که موتر د جلا دریور لخوا کارول کیږي، د دریور معلومات دننه کړئ. نه د دې خو تاسو کولی شئ دا مرحله رد کړئ.'}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <Field label={lang === 'dari' ? 'نام راننده' : 'د دریور نوم'}>
+                  <input
+                    value={driverName}
+                    onChange={e => setDriverName(e.target.value)}
+                    className={inp}
+                    placeholder={lang === 'dari' ? 'نام و تخلص...' : 'نوم او تخلص...'}
+                  />
+                </Field>
+                <Field label={lang === 'dari' ? 'نمبر لیسنس' : 'لیسنس نمبر'}>
+                  <input
+                    value={driverLicense}
+                    onChange={e => setDriverLicense(e.target.value)}
+                    className={inp}
+                    placeholder={lang === 'dari' ? 'شماره لیسنس...' : 'لیسنس شمیره...'}
+                    dir="ltr"
+                  />
+                </Field>
+                <Field label={lang === 'dari' ? 'شماره تلفن راننده' : 'د دریور تلیفون'}>
+                  <input
+                    value={driverPhone}
+                    onChange={e => setDriverPhone(e.target.value)}
+                    className={inp}
+                    dir="ltr"
+                  />
+                </Field>
+              </div>
+            </div>
+          )}
+
+          {/* ═══ STEP 4: Financial Calculation ═══ */}
+          {step === 4 && (
+            <div className="space-y-4">
               <StepHeader icon={Receipt} title={lang === 'dari' ? 'محاسبه مالی' : 'مالي حساب'} gradient="linear-gradient(135deg,#059669,#047857)" />
 
-              {/* Car + period summary */}
-              <div className="flex items-center gap-4 p-4 rounded-2xl border border-amber-200 bg-gradient-to-l from-amber-50 to-white">
-                <div className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl bg-amber-100 shrink-0">🚗</div>
+              {/* Car + period context strip */}
+              <div className="flex items-center gap-3 px-4 py-3 rounded-2xl border border-amber-200 bg-amber-50/60">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-xl bg-amber-100 shrink-0">🚗</div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-bold text-amber-900 truncate">{selectedCar?.carName} <span className="font-normal text-amber-600 text-sm">— {selectedCar?.plateNumber}</span></p>
-                  <p className="text-xs text-amber-500 mt-0.5">{selectedCar?.model} · {selectedCar?.color}</p>
+                  <p className="font-bold text-amber-900 truncate text-sm">{selectedCar?.carName}
+                    <span className="font-normal text-amber-500 text-xs mr-2">— {selectedCar?.plateNumber}</span>
+                  </p>
+                  <p className="text-xs text-amber-500">{customer.startDate} → {customer.endDate}</p>
                 </div>
                 {rentalDays > 0 && (
-                  <div className="shrink-0 text-center px-4 py-2 rounded-xl bg-amber-100 border border-amber-200">
-                    <p className="text-xl font-extrabold text-amber-900">{rentalDays}</p>
-                    <p className="text-xs text-amber-600">{lang === 'dari' ? 'روز' : 'ورځ'}</p>
+                  <div className="shrink-0 text-center px-3 py-1.5 rounded-xl bg-white border border-amber-200 shadow-sm">
+                    <p className="text-lg font-black text-amber-900 leading-none">{rentalDays}</p>
+                    <p className="text-[10px] text-amber-500 mt-0.5">{lang === 'dari' ? 'روز' : 'ورځ'}</p>
                   </div>
                 )}
               </div>
 
-              {/* ── Main billing card ── */}
-              <div className="rounded-2xl border-2 border-amber-200 overflow-hidden shadow-sm">
-                <div className="px-5 py-3 flex items-center gap-2" style={{ background: 'linear-gradient(135deg,#059669,#047857)' }}>
-                  <Receipt className="w-4 h-4 text-white" />
-                  <h4 className="font-bold text-white text-sm">{lang === 'dari' ? 'جزئیات مالی' : 'مالي جزئیات'}</h4>
+              {/* Input + auto-calculation row */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+                {/* Daily rate */}
+                <div>
+                  <label className={lbl}>
+                    {lang === 'dari' ? 'کرایه روزانه (افغانی)' : 'ورځنۍ کرایه (افغاني)'}
+                    <span className="text-red-500 mr-1"> *</span>
+                  </label>
+                  <input
+                    value={dailyRentInput}
+                    onChange={numericInputHandler(setDailyRentInput)}
+                    inputMode="numeric"
+                    placeholder="0"
+                    className={`${billingErrors.dailyRent ? eInp : inp} text-lg font-bold`}
+                    dir="ltr"
+                  />
+                  {billingErrors.dailyRent && <p className="mt-1 flex items-center gap-1 text-xs text-red-600"><AlertCircle className="w-3 h-3 shrink-0" />{billingErrors.dailyRent}</p>}
+                  {billingErrors.dates     && <p className="mt-1 flex items-center gap-1 text-xs text-red-600"><AlertCircle className="w-3 h-3 shrink-0" />{billingErrors.dates}</p>}
                 </div>
 
-                <div className="p-5 space-y-5">
+                {/* Advance payment */}
+                <div>
+                  <label className={lbl}>{lang === 'dari' ? 'پیش پرداخت دریافتی (افغانی)' : 'ترلاسه شوی پیش پرداخت (افغاني)'}</label>
+                  <input
+                    value={receivedAmount}
+                    onChange={numericInputHandler(setReceivedAmount)}
+                    inputMode="numeric"
+                    placeholder="0"
+                    className={`${inp} text-lg font-bold`}
+                    dir="ltr"
+                  />
+                </div>
+              </div>
 
-                  {/* ── Daily Rent Input (required, editable) ── */}
-                  <div>
-                    <label className="block text-sm font-bold text-amber-900 mb-2">
-                      {lang === 'dari' ? 'کرایه روزانه' : 'ورځنۍ کرایه'}
-                      <span className="text-red-500 mr-1">*</span>
-                      <span className="text-xs font-normal text-amber-500 mr-2">
-                        {lang === 'dari' ? '(می‌توانید تغییر دهید)' : '(بدلولی شئ)'}
-                      </span>
-                    </label>
-                    <div className="relative">
-                      <input
-                        value={dailyRentInput}
-                        onChange={numericInputHandler(setDailyRentInput)}
-                        inputMode="numeric"
-                        placeholder={lang === 'dari' ? '0' : '۰'}
-                        className={`${billingErrors.dailyRent ? eInp : inp} pl-20 text-lg font-bold`}
-                        style={{ direction: 'ltr', textAlign: 'right' }}
-                      />
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-amber-500 font-medium pointer-events-none">
-                        {lang === 'dari' ? 'افغانی' : 'افغاني'}
-                      </span>
-                    </div>
-                    {billingErrors.dailyRent && (
-                      <p className="mt-1 flex items-center gap-1 text-xs text-red-600">
-                        <AlertCircle className="w-3 h-3 shrink-0" />{billingErrors.dailyRent}
-                      </p>
-                    )}
-                    {billingErrors.dates && (
-                      <p className="mt-1 flex items-center gap-1 text-xs text-red-600">
-                        <AlertCircle className="w-3 h-3 shrink-0" />{billingErrors.dates}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* ── Formula: rate × days = total ── */}
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="rounded-xl p-3 text-center border-2 border-amber-200 bg-amber-50">
-                      <p className="text-xs text-amber-600 mb-1 font-medium">{lang === 'dari' ? 'کرایه روزانه' : 'ورځنۍ کرایه'}</p>
-                      <p className="text-xl font-extrabold text-amber-900">{formatNumber(dailyRent)}</p>
-                      <p className="text-xs text-amber-500">افغانی</p>
-                    </div>
-
-                    <div className="rounded-xl p-3 text-center border-2 border-gray-200 bg-gray-50 flex items-center justify-center">
-                      <div>
-                        <p className="text-2xl font-black text-gray-400">×</p>
-                        <p className="text-xl font-extrabold text-gray-700">{rentalDays}</p>
-                        <p className="text-xs text-gray-500">{lang === 'dari' ? 'روز' : 'ورځ'}</p>
-                      </div>
-                    </div>
-
-                    <div className="rounded-xl p-3 text-center border-2 border-green-400 bg-green-50">
-                      <p className="text-xs text-green-700 mb-1 font-bold">{lang === 'dari' ? 'مجموع کرایه' : 'ټوله کرایه'}</p>
-                      <p className="text-xl font-extrabold text-green-800">{formatNumber(totalRent)}</p>
-                      <p className="text-xs text-green-600">افغانی</p>
-                    </div>
-                  </div>
-
-                  {/* ── Payment input + remaining ── */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-bold text-amber-900 mb-2">
-                        {lang === 'dari' ? 'مبلغ دریافت شده' : 'ترلاسه شوی مبلغ'}
-                        <span className="text-xs font-normal text-amber-500 mr-2">(افغانی)</span>
-                      </label>
-                      <div className="relative">
-                        <input
-                          value={receivedAmount}
-                          onChange={numericInputHandler(setReceivedAmount)}
-                          inputMode="numeric"
-                          placeholder="0"
-                          className={`${inp} pl-20 text-lg font-bold`}
-                          style={{ direction: 'ltr', textAlign: 'right' }}
-                        />
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-amber-500 font-medium pointer-events-none">
-                          {lang === 'dari' ? 'افغانی' : 'افغاني'}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col gap-2 justify-end">
-                      <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-red-50 border-2 border-red-200">
-                        <span className="text-sm text-red-700 font-semibold">{lang === 'dari' ? 'باقی مانده' : 'پاتې مبلغ'}</span>
-                        <span className="text-lg font-extrabold text-red-700">{formatNumber(remaining)} <span className="text-xs font-normal">افغانی</span></span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* ── Total summary banner ── */}
-                  <div className="px-5 py-4 rounded-2xl border-2 border-green-300" style={{ background: 'linear-gradient(135deg,#d1fae5,#ecfdf5)' }}>
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-base font-bold text-green-800">{lang === 'dari' ? 'مجموع کل کرایه' : 'د کرایې ټول مجموع'}</span>
-                      <span className="text-2xl font-black text-green-900">{formatNumber(totalRent)} <span className="text-sm font-normal text-green-700">افغانی</span></span>
-                    </div>
-                    <div className="flex gap-2 flex-wrap">
-                      <span className="inline-flex items-center gap-1 text-xs bg-green-100 text-green-800 border border-green-300 px-3 py-1.5 rounded-full font-semibold">
-                        ✓ {lang === 'dari' ? 'دریافت شده:' : 'ترلاسه شوي:'} {formatNumber(received)} افغانی
-                      </span>
-                      {remaining > 0 && (
-                        <span className="inline-flex items-center gap-1 text-xs bg-red-100 text-red-700 border border-red-200 px-3 py-1.5 rounded-full font-semibold">
-                          ◌ {lang === 'dari' ? 'باقی:' : 'پاتې:'} {formatNumber(remaining)} افغانی
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* ── Revenue split 50/50 ── */}
-                  <div className="pt-2">
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="flex-1 h-px bg-amber-200" />
-                      <span className="text-xs font-bold text-amber-700 uppercase tracking-wider px-2">
-                        {lang === 'dari' ? 'تقسیم درآمد' : 'عاید تقسیم'}
-                      </span>
-                      <div className="flex-1 h-px bg-amber-200" />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      {/* Owner 50% */}
-                      <div className="relative rounded-2xl overflow-hidden border-2 border-teal-200">
-                        <div className="px-4 py-2 text-center" style={{ background: 'linear-gradient(135deg,#0d9488,#0f766e)' }}>
-                          <p className="text-xs font-bold text-white">{lang === 'dari' ? 'سهم صاحب موتر' : 'د موتر د خاوند برخه'}</p>
-                        </div>
-                        <div className="px-4 py-3 bg-teal-50 text-center">
-                          <p className="text-2xl font-black text-teal-800">{formatNumber(ownerShare)}</p>
-                          <p className="text-xs text-teal-600 mt-0.5">افغانی</p>
-                          <span className="inline-block mt-2 text-xs bg-teal-100 text-teal-700 border border-teal-300 px-2 py-0.5 rounded-full font-bold">50%</span>
-                        </div>
-                      </div>
-
-                      {/* Admin 50% */}
-                      <div className="relative rounded-2xl overflow-hidden border-2 border-violet-200">
-                        <div className="px-4 py-2 text-center" style={{ background: 'linear-gradient(135deg,#7c3aed,#5b21b6)' }}>
-                          <p className="text-xs font-bold text-white">{lang === 'dari' ? 'سهم ادمین' : 'د ادمین برخه'}</p>
-                        </div>
-                        <div className="px-4 py-3 bg-violet-50 text-center">
-                          <p className="text-2xl font-black text-violet-800">{formatNumber(adminShare)}</p>
-                          <p className="text-xs text-violet-600 mt-0.5">افغانی</p>
-                          <span className="inline-block mt-2 text-xs bg-violet-100 text-violet-700 border border-violet-300 px-2 py-0.5 rounded-full font-bold">50%</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
+              {/* Auto-calculated summary — 3 cards */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-2xl p-4 text-center border-2 border-amber-200 bg-amber-50">
+                  <p className="text-xs text-amber-600 font-medium mb-1">{lang === 'dari' ? 'مجموع کرایه' : 'ټوله کرایه'}</p>
+                  <p className="text-xl font-black text-amber-900">{formatNumber(totalRent)}</p>
+                  <p className="text-[10px] text-amber-400 mt-0.5">افغانی</p>
+                </div>
+                <div className="rounded-2xl p-4 text-center border-2 border-green-300 bg-green-50">
+                  <p className="text-xs text-green-600 font-medium mb-1">{lang === 'dari' ? 'دریافت شده' : 'ترلاسه شوي'}</p>
+                  <p className="text-xl font-black text-green-800">{formatNumber(received)}</p>
+                  <p className="text-[10px] text-green-400 mt-0.5">افغانی</p>
+                </div>
+                <div className={`rounded-2xl p-4 text-center border-2 ${remaining > 0 ? 'border-red-300 bg-red-50' : 'border-emerald-300 bg-emerald-50'}`}>
+                  <p className={`text-xs font-medium mb-1 ${remaining > 0 ? 'text-red-600' : 'text-emerald-600'}`}>{lang === 'dari' ? 'باقی‌مانده' : 'پاتې'}</p>
+                  <p className={`text-xl font-black ${remaining > 0 ? 'text-red-700' : 'text-emerald-700'}`}>{formatNumber(remaining)}</p>
+                  <p className={`text-[10px] mt-0.5 ${remaining > 0 ? 'text-red-400' : 'text-emerald-400'}`}>افغانی</p>
                 </div>
               </div>
             </div>
           )}
 
-          {/* ═══ STEP 4: Documents + Review ═══ */}
-          {step === 4 && (
+          {/* ═══ STEP 5: Documents + Review ═══ */}
+          {step === 5 && (
             <div className="space-y-6">
               <StepHeader icon={FileImage} title={lang === 'dari' ? 'آپلود اسناد' : 'د اسنادو پورته کول'} gradient="linear-gradient(135deg,#0891b2,#0e7490)" />
 
               {/* Document uploads */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                <DocSlot
-                  label={lang === 'dari' ? 'عکس مشتری' : 'د مشتري انځور'}
-                  sublabel={lang === 'dari' ? 'برای تأیید هویت' : 'د هویت تایید لپاره'}
-                  preview={customerPhotoPreview}
-                  onFile={f => { setCustomerPhoto(f); setCustomerPhotoPreview(URL.createObjectURL(f)); }}
-                  onClear={() => { setCustomerPhoto(null); setCustomerPhotoPreview(null); }}
-                  color="#3b82f6"
-                />
-                <DocSlot
+              <div className="space-y-5">
+                {/* Row 1: Customer photo + Bill doc */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                  <DocSlot
+                    label={lang === 'dari' ? 'عکس مشتری' : 'د مشتري انځور'}
+                    sublabel={lang === 'dari' ? 'برای تأیید هویت' : 'د هویت تایید لپاره'}
+                    preview={customerPhotoPreview}
+                    onFile={f => { setCustomerPhoto(f); setCustomerPhotoPreview(URL.createObjectURL(f)); }}
+                    onClear={() => { setCustomerPhoto(null); setCustomerPhotoPreview(null); }}
+                    color="#3b82f6"
+                  />
+                  <DocSlot
+                    label={lang === 'dari' ? 'عکس بل / قرارداد' : 'د بل / قرارداد انځور'}
+                    sublabel={lang === 'dari' ? 'عکس از بل چاپ شده' : 'د چاپ شوي بل انځور'}
+                    preview={billDocPhotoPreview}
+                    onFile={f => { setBillDocPhoto(f); setBillDocPhotoPreview(URL.createObjectURL(f)); }}
+                    onClear={() => { setBillDocPhoto(null); setBillDocPhotoPreview(null); }}
+                    color="#059669"
+                  />
+                </div>
+
+                {/* Row 2: Guarantor photos — single multi-upload field */}
+                <MultiDocSlot
                   label={lang === 'dari' ? 'عکس ضامن' : 'د ضامن انځور'}
-                  sublabel={lang === 'dari' ? 'در صورت وجود ضامن' : 'که چیرې ضامن وي'}
-                  preview={guarantorPhotoPreview}
-                  onFile={f => { setGuarantorPhoto(f); setGuarantorPhotoPreview(URL.createObjectURL(f)); }}
-                  onClear={() => { setGuarantorPhoto(null); setGuarantorPhotoPreview(null); }}
+                  sublabel={lang === 'dari' ? 'حداکثر ۲ تصویر را با هم انتخاب کنید' : 'تر ۲ پورې انځورونه یو ځل وټاکئ'}
+                  files={[guarantorPhoto, guarantorPhoto2]}
+                  previews={[guarantorPhotoPreview, guarantorPhoto2Preview]}
+                  maxFiles={2}
+                  onFilesChange={(fs, ps) => {
+                    setGuarantorPhoto(fs[0] ?? null);
+                    setGuarantorPhoto2(fs[1] ?? null);
+                    setGuarantorPhotoPreview(ps[0] ?? null);
+                    setGuarantorPhoto2Preview(ps[1] ?? null);
+                  }}
                   color="#8b5cf6"
                 />
-                <DocSlot
-                  label={lang === 'dari' ? 'عکس بل / قرارداد' : 'د بل / قرارداد انځور'}
-                  sublabel={lang === 'dari' ? 'عکس از بل چاپ شده' : 'د چاپ شوي بل انځور'}
-                  preview={billDocPhotoPreview}
-                  onFile={f => { setBillDocPhoto(f); setBillDocPhotoPreview(URL.createObjectURL(f)); }}
-                  onClear={() => { setBillDocPhoto(null); setBillDocPhotoPreview(null); }}
-                  color="#059669"
-                />
-                <DocSlot
+
+                {/* Row 3: Tazkira doc photos — single multi-upload field */}
+                <MultiDocSlot
                   label={lang === 'dari' ? 'عکس تذکره / هویت' : 'د تذکرې / هویت انځور'}
-                  sublabel={lang === 'dari' ? 'تصویر تذکره مشتری' : 'د مشتري د تذکرې انځور'}
-                  preview={tazkiraDocPhotoPreview}
-                  onFile={f => { setTazkiraDocPhoto(f); setTazkiraDocPhotoPreview(URL.createObjectURL(f)); }}
-                  onClear={() => { setTazkiraDocPhoto(null); setTazkiraDocPhotoPreview(null); }}
+                  sublabel={lang === 'dari' ? 'حداکثر ۲ تصویر را با هم انتخاب کنید' : 'تر ۲ پورې انځورونه یو ځل وټاکئ'}
+                  files={[tazkiraDocPhoto, tazkiraDocPhoto2]}
+                  previews={[tazkiraDocPhotoPreview, tazkiraDocPhoto2Preview]}
+                  maxFiles={2}
+                  onFilesChange={(fs, ps) => {
+                    setTazkiraDocPhoto(fs[0] ?? null);
+                    setTazkiraDocPhoto2(fs[1] ?? null);
+                    setTazkiraDocPhotoPreview(ps[0] ?? null);
+                    setTazkiraDocPhoto2Preview(ps[1] ?? null);
+                  }}
                   color="#dc2626"
                 />
               </div>
 
-              {/* Final review summary */}
-              <div className="border-t-2 border-amber-200 pt-5">
-                <h4 className="font-bold text-amber-900 mb-4 flex items-center gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-600" />
-                  {lang === 'dari' ? 'بررسی نهایی سفارش' : 'د سفارش وروستۍ بیاکتنه'}
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="p-4 rounded-xl border-2 border-amber-100 bg-amber-50 space-y-1.5">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Car className="w-4 h-4 text-amber-600" />
-                      <span className="font-bold text-amber-800 text-sm">{lang === 'dari' ? 'موتر' : 'موتر'}</span>
-                    </div>
-                    <p className="font-bold text-amber-900 text-sm">{selectedCar?.carName}</p>
-                    <p className="text-xs text-amber-600">{selectedCar?.plateNumber}</p>
-                    <p className="text-xs text-amber-600">{customer.startDate} ← {customer.endDate}</p>
-                    <p className="text-sm font-bold text-green-700">{fmtCur(totalRent)}</p>
-                  </div>
-                  <div className="p-4 rounded-xl border-2 border-blue-100 bg-blue-50 space-y-1.5">
-                    <div className="flex items-center gap-2 mb-2">
-                      <User className="w-4 h-4 text-blue-600" />
-                      <span className="font-bold text-blue-800 text-sm">{lang === 'dari' ? 'مشتری' : 'مشتری'}</span>
-                    </div>
-                    <p className="font-bold text-blue-900 text-sm">{customer.fullName || '—'}</p>
-                    <p className="text-xs text-blue-600">{customer.phoneNumber}</p>
-                    <p className="text-xs text-blue-600">{lang === 'dari' ? 'پرداخت:' : 'تادیه:'} {fmtCur(received)}</p>
-                    <p className="text-xs text-red-600">{lang === 'dari' ? 'باقی:' : 'پاتې:'} {fmtCur(remaining)}</p>
-                  </div>
-                  <div className="p-4 rounded-xl border-2 border-purple-100 bg-purple-50 space-y-1.5">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Shield className="w-4 h-4 text-purple-600" />
-                      <span className="font-bold text-purple-800 text-sm">{lang === 'dari' ? 'ضامن' : 'ضامن'}</span>
-                    </div>
-                    {guarantor.fullName ? (
-                      <>
-                        <p className="font-bold text-purple-900 text-sm">{guarantor.fullName}</p>
-                        <p className="text-xs text-purple-600">{guarantor.phoneNumber}</p>
-                      </>
-                    ) : (
-                      <p className="text-purple-400 text-sm">{lang === 'dari' ? 'ضامن ثبت نشده' : 'ضامن نشته'}</p>
-                    )}
-                  </div>
-                </div>
+              {/* Compact order summary at the foot of step 5 */}
+              <div className="flex flex-wrap items-center gap-2 px-4 py-3 rounded-xl border border-amber-200 bg-amber-50/60 text-xs text-amber-700">
+                <span className="font-bold">{selectedCar?.carName}</span>
+                <span className="text-amber-300">·</span>
+                <span>{customer.fullName}</span>
+                <span className="text-amber-300">·</span>
+                <span className="font-semibold text-green-700">{fmtCur(totalRent)}</span>
+                {remaining > 0 && <><span className="text-amber-300">·</span><span className="font-semibold text-red-600">{lang === 'dari' ? 'باقی:' : 'پاتې:'} {fmtCur(remaining)}</span></>}
               </div>
             </div>
           )}
@@ -1197,12 +1348,12 @@ export default function OrderNewPage() {
               </button>
             ) : <div />}
 
-            {step < 4 ? (
+            {step < 5 ? (
               <button
                 onClick={() => {
                   if (step === 0 && !validateStep0()) return;
                   if (step === 1 && !validateStep1()) return;
-                  if (step === 3 && !validateStep3()) return;
+                  if (step === 4 && !validateStep3()) return;
                   setDraftEnabled(true);
                   goStep(step + 1);
                 }}
@@ -1212,6 +1363,7 @@ export default function OrderNewPage() {
                 {t.next}<ChevronLeft className="w-4 h-4" />
               </button>
             ) : (
+              /* Step 5 = final save + redirect to print */
               <button
                 onClick={isEditMode ? handleEditSubmit : handleSubmit}
                 disabled={saving}
@@ -1223,13 +1375,37 @@ export default function OrderNewPage() {
                 ) : isEditMode ? (
                   <><Check className="w-4 h-4" />{lang === 'dari' ? 'ذخیره تغییرات' : 'بدلونونه خوندي کول'}</>
                 ) : (
-                  <><Check className="w-4 h-4" />{lang === 'dari' ? 'ثبت و چاپ بل' : 'ثبت او چاپ بل'}</>
+                  <><Check className="w-4 h-4" />{lang === 'dari' ? 'ثبت سفارش و چاپ بل' : 'سفارش ثبت کړئ او بل چاپ کړئ'}</>
                 )}
               </button>
             )}
           </div>
         </div>
       </div>
+      {/* ── Admin Bill overlay ── */}
+      {previewAdminBill && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, overflow: 'auto', background: '#d1d5db' }}>
+          <ContractBill
+            data={buildAdminBillPreview()}
+            lang={lang as 'dari' | 'pashto'}
+            onClose={() => setPreviewAdminBill(false)}
+            autoPrint={false}
+          />
+        </div>
+      )}
+
+      {/* ── Customer Bill overlay ── */}
+      {previewCustomerBill && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, overflow: 'auto', background: '#d1d5db' }}>
+          <CustomerBill
+            data={buildCustomerBillPreview()}
+            lang={lang as 'dari' | 'pashto'}
+            onClose={() => setPreviewCustomerBill(false)}
+            autoPrint={false}
+          />
+        </div>
+      )}
+
     </MainLayout>
   );
 }

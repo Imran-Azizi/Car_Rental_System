@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ownerPortalAPI } from '@/lib/api';
-import { Car, FileText, TrendingUp, DollarSign, CheckCircle, Clock, ArrowLeft, Activity, Hourglass, TrendingDown, Wallet, Bell } from 'lucide-react';
+import { Car, FileText, TrendingUp, DollarSign, CheckCircle, Clock, ArrowLeft, Activity, Hourglass, TrendingDown, Wallet, Bell, CalendarClock, Lock } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { formatAfghanDate, formatCurrency } from '@/lib/utils';
 
@@ -109,6 +109,7 @@ export default function OwnerDashboardPage() {
           </div>
           <div className="px-4 py-4" style={{ background: 'linear-gradient(135deg,#f0fdfa,#ccfbf1)' }}>
             <p className="text-2xl font-black text-teal-900">{formatCurrency(stats?.ownerShareTotal ?? 0)}</p>
+            <p className="text-xs text-teal-600 mt-1">فقط قراردادهای تکمیل‌شده</p>
           </div>
         </div>
 
@@ -121,6 +122,7 @@ export default function OwnerDashboardPage() {
           </div>
           <div className="px-4 py-4" style={{ background: 'linear-gradient(135deg,#fff5f5,#fee2e2)' }}>
             <p className="text-2xl font-black text-red-800">{formatCurrency(stats?.totalExpenseDeducted ?? 0)}</p>
+            <p className="text-xs text-red-400 mt-1">مصارف ثبت‌شده برای موترهای شما</p>
           </div>
         </div>
 
@@ -134,6 +136,7 @@ export default function OwnerDashboardPage() {
             <p className={`text-2xl font-black ${(stats?.netOwnerShare ?? 0) >= 0 ? 'text-emerald-900' : 'text-red-700'}`}>
               {formatCurrency(stats?.netOwnerShare ?? 0)}
             </p>
+            <p className="text-xs text-emerald-600 mt-1">پس از کسر مصارف تکمیل‌شده</p>
           </div>
         </div>
       </div>
@@ -173,32 +176,54 @@ export default function OwnerDashboardPage() {
             <div className="py-12 text-center text-amber-400 text-sm">هنوز قراردادی ثبت نشده</div>
           ) : (
             <div className="divide-y divide-amber-50">
-              {recentContracts.map((c: any) => (
-                <div key={c.id} className="px-6 py-4 hover:bg-amber-50/40 transition-colors">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-semibold text-amber-900 text-sm">{c.contractNumber}</span>
-                        <span className="px-2 py-0.5 rounded-full text-xs font-medium"
-                          style={{ background: statusLabels[c.status]?.bg, color: statusLabels[c.status]?.color }}>
-                          {statusLabels[c.status]?.label}
-                        </span>
+              {recentContracts.map((c: any) => {
+                const isActive = c.status === 'ACTIVE';
+                return (
+                  <div key={c.id} className="px-6 py-4 hover:bg-amber-50/40 transition-colors">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <span className="font-semibold text-amber-900 text-sm">{c.contractNumber}</span>
+                          <span className="px-2 py-0.5 rounded-full text-xs font-medium"
+                            style={{ background: statusLabels[c.status]?.bg, color: statusLabels[c.status]?.color }}>
+                            {statusLabels[c.status]?.label}
+                          </span>
+                        </div>
+                        <p className="text-amber-700 text-xs">{c.car?.carName} — {c.car?.plateNumber}</p>
+
+                        {isActive ? (
+                          /* ── ACTIVE: booking period only ── */
+                          <div className="flex items-center gap-1.5 mt-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium"
+                            style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' }}>
+                            <CalendarClock className="w-3.5 h-3.5 shrink-0" />
+                            {formatAfghanDate(c.startDate)} — {formatAfghanDate(c.endDate)}
+                          </div>
+                        ) : (
+                          <p className="text-amber-500 text-xs mt-0.5">{c.customer?.fullName}</p>
+                        )}
                       </div>
-                      <p className="text-amber-700 text-xs">{c.car?.carName} — {c.car?.plateNumber}</p>
-                      <p className="text-amber-500 text-xs">{c.customer?.fullName}</p>
-                    </div>
-                    <div className="text-right space-y-0.5">
-                      <p className="text-amber-800 font-semibold text-sm">{formatCurrency(c.totalRent)}</p>
-                      {c.ownerShare > 0 && (
-                        <p className="text-teal-700 text-xs font-bold">سهم: {formatCurrency(c.ownerShare)}</p>
-                      )}
-                      {c.remainingAmount > 0 && (
-                        <p className="text-red-500 text-xs">باقی: {formatCurrency(c.remainingAmount)}</p>
+
+                      {isActive ? (
+                        /* ── ACTIVE: no financial data shown ── */
+                        <div className="flex items-center gap-1 text-xs text-slate-400 shrink-0">
+                          <Lock className="w-3.5 h-3.5" />
+                          <span>پس از برگشت</span>
+                        </div>
+                      ) : (
+                        <div className="text-right space-y-0.5 shrink-0">
+                          <p className="text-amber-800 font-semibold text-sm">{formatCurrency(c.totalRent)}</p>
+                          {(c.ownerShare ?? 0) > 0 && (
+                            <p className="text-teal-700 text-xs font-bold">سهم: {formatCurrency(c.ownerShare)}</p>
+                          )}
+                          {(c.remainingAmount ?? 0) > 0 && (
+                            <p className="text-red-500 text-xs">باقی: {formatCurrency(c.remainingAmount)}</p>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

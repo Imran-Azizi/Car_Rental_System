@@ -4,6 +4,7 @@ import path from 'path';
 import {
   getContracts, getContractById, createContract,
   updateContract, markAsReturned, addPayment, deleteContract,
+  triggerOverdueCheck,
 } from '../controllers/contractController.js';
 import { authenticate } from '../middleware/auth.js';
 
@@ -22,19 +23,21 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({ storage, fileFilter, limits: { fileSize: 5 * 1024 * 1024 } });
 
 const docFields = upload.fields([
-  { name: 'billDocPhoto',    maxCount: 1 },
-  { name: 'tazkiraDocPhoto', maxCount: 1 },
+  { name: 'billDocPhoto',     maxCount: 1 },
+  { name: 'tazkiraDocPhoto',  maxCount: 1 },
+  { name: 'tazkiraDocPhoto2', maxCount: 1 },
 ]);
 
 const router = express.Router();
 router.use(authenticate);
 
-router.get('/',             getContracts);
-router.get('/:id',          getContractById);
-router.post('/',            docFields, createContract);
-router.put('/:id',          docFields, updateContract);
-router.patch('/:id/return', markAsReturned);
-router.post('/:id/payment', addPayment);
-router.delete('/:id',       deleteContract);
+router.get('/',                  getContracts);
+router.get('/:id',               getContractById);
+router.post('/',                 docFields, createContract);
+router.put('/:id',               docFields, updateContract);
+router.patch('/:id/return',      markAsReturned);
+router.post('/:id/payment',      addPayment);
+router.delete('/:id',            deleteContract);
+router.post('/overdue-check',    triggerOverdueCheck); // admin trigger or cron ping
 
 export default router;

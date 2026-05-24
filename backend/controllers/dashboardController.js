@@ -10,17 +10,20 @@ export const getDashboardStats = async (req, res) => {
       totalCars,
       availableCars,
       rentedCars,
+      maintenanceCars,
       totalCustomers,
       activeContracts,
       completedContracts,
+      overdueContracts,
       totalContractsCount,
       paymentsForMonthly,
       pendingPaymentsAgg,
       totalContractValueAgg,
-      ownerShareAllAgg,       // owner share from ALL contracts
-      adminShareAllAgg,       // admin share from ALL contracts
-      ownerShareCompletedAgg, // owner share from COMPLETED only
-      adminShareCompletedAgg, // admin share from COMPLETED only
+      totalReceivedAgg,
+      ownerShareAllAgg,
+      adminShareAllAgg,
+      ownerShareCompletedAgg,
+      adminShareCompletedAgg,
       recentContracts,
       pendingContractsList,
       recentPaymentsList,
@@ -29,40 +32,46 @@ export const getDashboardStats = async (req, res) => {
       prisma.car.count(),
       prisma.car.count({ where: { status: 'AVAILABLE' } }),
       prisma.car.count({ where: { status: 'RENTED' } }),
+      prisma.car.count({ where: { status: 'MAINTENANCE' } }),
       prisma.customer.count(),
       prisma.rentalContract.count({ where: { status: 'ACTIVE' } }),
       prisma.rentalContract.count({ where: { status: 'COMPLETED' } }),
+      prisma.rentalContract.count({ where: { status: 'OVERDUE' } }),
       prisma.rentalContract.count(),
       prisma.payment.findMany({
         where: { paymentDate: { gte: sixMonthsAgo } },
         select: { amount: true, paymentDate: true },
       }),
+      // Pending = remaining on ACTIVE + OVERDUE contracts
       prisma.rentalContract.aggregate({
         _sum: { remainingAmount: true },
         where: { status: { in: ['ACTIVE', 'OVERDUE'] } },
       }),
+      // Total contract value across ALL contracts
       prisma.rentalContract.aggregate({ _sum: { totalRent: true } }),
-      // Owner / admin share from ALL contracts (shows full picture)
+      // Total actually received (sum of all payments ever made)
+      prisma.payment.aggregate({ _sum: { amount: true } }),
+      // Owner / admin share from ALL contracts
       prisma.rentalContract.aggregate({ _sum: { ownerShare: true } }),
       prisma.rentalContract.aggregate({ _sum: { adminShare: true } }),
       // Owner / admin share from COMPLETED contracts only
       prisma.rentalContract.aggregate({ _sum: { ownerShare: true }, where: { status: 'COMPLETED' } }),
       prisma.rentalContract.aggregate({ _sum: { adminShare: true }, where: { status: 'COMPLETED' } }),
       prisma.rentalContract.findMany({
-        take: 5,
+        take: 8,
         orderBy: { createdAt: 'desc' },
         include: {
-          car:      { select: { carName: true, plateNumber: true } },
+          car:      { select: { carName: true, plateNumber: true, model: true } },
           customer: { select: { fullName: true, phoneNumber: true } },
         },
       }),
       prisma.rentalContract.findMany({
-        where: { status: 'ACTIVE', remainingAmount: { gt: 0 } },
+        where: { status: { in: ['ACTIVE', 'OVERDUE'] }, remainingAmount: { gt: 0 } },
         orderBy: { remainingAmount: 'desc' },
         take: 20,
         select: {
           id: true, contractNumber: true, remainingAmount: true,
-          totalRent: true, status: true,
+          totalRent: true, status: true, endDate: true,
           customer: { select: { fullName: true, phoneNumber: true } },
           car:      { select: { carName: true, plateNumber: true } },
         },
@@ -80,47 +89,49 @@ export const getDashboardStats = async (req, res) => {
           },
         },
       }),
-      // Total expense deductions by split — must be last to match destructuring
       prisma.expense.aggregate({ _sum: { adminShare: true, ownerShare: true, amount: true } }),
     ]);
 
-    const totalContractValue    = totalContractValueAgg._sum.totalRent         || 0;
-    const pendingPayments       = pendingPaymentsAgg._sum.remainingAmount       || 0;
-    const totalReceived         = totalContractValue - pendingPayments;
-    const ownerIncome           = ownerShareAllAgg._sum.ownerShare              || 0;
-    const adminIncome           = adminShareAllAgg._sum.adminShare              || 0;
-    const ownerIncomeCompleted  = ownerShareCompletedAgg._sum.ownerShare        || 0;
-    const adminIncomeCompleted  = adminShareCompletedAgg._sum.adminShare        || 0;
-    const totalExpenses         = expenseSplitsAgg._sum.amount                 || 0;
-    const adminExpenses         = expenseSplitsAgg._sum.adminShare             || 0;
-    const ownerExpenses         = expenseSplitsAgg._sum.ownerShare             || 0;
-    const adminNetIncome        = adminIncome - adminExpenses;
-    const ownerNetIncome        = ownerIncome - ownerExpenses;
+    const totalContractValue   = totalContractValueAgg._sum.totalRent      || 0;
+    const pendingPayments      = pendingPaymentsAgg._sum.remainingAmount    || 0;
+    const totalReceived        = totalReceivedAgg._sum.amount               || 0;
+    const ownerIncome          = ownerShareAllAgg._sum.ownerShare           || 0;
+    const adminIncome          = adminShareAllAgg._sum.adminShare           || 0;
+    const ownerIncomeCompleted = ownerShareCompletedAgg._sum.ownerShare     || 0;
+    const adminIncomeCompleted = adminShareCompletedAgg._sum.adminShare     || 0;
+    const totalExpenses        = expenseSplitsAgg._sum.amount               || 0;
+    const adminExpenses        = expenseSplitsAgg._sum.adminShare           || 0;
+    const ownerExpenses        = expenseSplitsAgg._sum.ownerShare           || 0;
+    const adminNetIncome       = adminIncome - adminExpenses;
+    const ownerNetIncome       = ownerIncome - ownerExpenses;
 
-    // Monthly income chart — last 6 months
+    // Monthly income chart — last 6 months, sorted ascending
     const monthlyIncome = {};
     paymentsForMonthly.forEach(p => {
       const key = `${p.paymentDate.getFullYear()}-${String(p.paymentDate.getMonth() + 1).padStart(2, '0')}`;
       monthlyIncome[key] = (monthlyIncome[key] || 0) + p.amount;
     });
+    const monthlyIncomeSorted = Object.fromEntries(
+      Object.entries(monthlyIncome).sort(([a], [b]) => a.localeCompare(b))
+    );
 
     sendSuccess(res, {
-      totalCars, availableCars, rentedCars, totalCustomers,
-      activeContracts, completedContracts,
+      // Fleet
+      totalCars, availableCars, rentedCars, maintenanceCars,
+      // Customers & contracts
+      totalCustomers,
+      activeContracts, completedContracts, overdueContracts,
       totalContractsCount,
+      // Financials
       totalContractValue,
       totalReceived,
       pendingPayments,
-      ownerIncome,
-      adminIncome,
-      ownerIncomeCompleted,
-      adminIncomeCompleted,
-      totalExpenses,
-      adminExpenses,
-      ownerExpenses,
-      adminNetIncome,
-      ownerNetIncome,
-      monthlyIncome,
+      ownerIncome,        adminIncome,
+      ownerIncomeCompleted, adminIncomeCompleted,
+      totalExpenses,      adminExpenses,        ownerExpenses,
+      adminNetIncome,     ownerNetIncome,
+      // Charts & lists
+      monthlyIncome: monthlyIncomeSorted,
       recentContracts,
       pendingContractsList,
       recentPaymentsList,

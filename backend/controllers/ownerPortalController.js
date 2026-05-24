@@ -1,6 +1,37 @@
 import prisma from '../utils/prisma.js';
 import { sendSuccess, sendError } from '../utils/response.js';
 
+/**
+ * Strip all sensitive financial/customer data from a contract while it has
+ * NOT yet been returned (ACTIVE or OVERDUE). Only the booking window is
+ * visible. Full details are revealed once status is COMPLETED or CANCELLED.
+ */
+function maskIfActive(contract) {
+  if (!contract) return contract;
+  const shouldMask = contract.status === 'ACTIVE' || contract.status === 'OVERDUE';
+  if (!shouldMask) return contract;
+  return {
+    id:              contract.id,
+    contractNumber:  contract.contractNumber,
+    status:          contract.status,
+    startDate:       contract.startDate,
+    endDate:         contract.endDate,
+    car:             contract.car     ?? null,
+    createdAt:       contract.createdAt ?? null,
+    // All sensitive fields hidden until the car is returned
+    customer:        null,
+    guarantor:       null,
+    totalRent:       null,
+    remainingAmount: null,
+    advancePayment:  null,
+    rentPrice:       null,
+    ownerShare:      null,
+    adminShare:      null,
+    payments:        [],
+    _masked:         true,
+  };
+}
+
 export const getOwnerDashboard = async (req, res) => {
   try {
     const ownerId = req.owner.id;
@@ -20,7 +51,7 @@ export const getOwnerDashboard = async (req, res) => {
         _count: { id: true },
       }),
       prisma.payment.aggregate({
-        where: { rentalContract: { car: { ownerId } } },
+        where: { rentalContract: { car: { ownerId }, status: 'COMPLETED' } },
         _sum: { amount: true },
       }),
       prisma.rentalContract.count({ where: { car: { ownerId }, status: 'ACTIVE' } }),
@@ -36,11 +67,11 @@ export const getOwnerDashboard = async (req, res) => {
         },
       }),
       prisma.rentalContract.aggregate({
-        where: { car: { ownerId } },
+        where: { car: { ownerId }, status: 'COMPLETED' },
         _sum: { ownerShare: true },
       }),
       prisma.rentalContract.aggregate({
-        where: { car: { ownerId } },
+        where: { car: { ownerId }, status: 'COMPLETED' },
         _sum: { totalRent: true },
       }),
       // Total expense deductions billed to this owner
@@ -77,7 +108,7 @@ export const getOwnerDashboard = async (req, res) => {
         completedContracts:    statusMap['COMPLETED'] || 0,
         cancelledContracts:    statusMap['CANCELLED'] || 0,
       },
-      recentContracts,
+      recentContracts: recentContracts.map(maskIfActive),
       cars,
       unreadNotificationCount,
     });
@@ -108,10 +139,7 @@ export const getOwnerCars = async (req, res) => {
         rentalContracts: {
           where: { status: 'ACTIVE' },
           take: 1,
-          select: {
-            id: true, contractNumber: true, startDate: true, endDate: true,
-            customer: { select: { fullName: true, phoneNumber: true } },
-          },
+          select: { id: true, startDate: true, endDate: true },
         },
       },
     });
@@ -140,13 +168,13 @@ export const getOwnerContracts = async (req, res) => {
       where,
       orderBy: { createdAt: 'desc' },
       include: {
-        car: { select: { id: true, carName: true, carType: true, plateNumber: true, model: true } },
+        car:      { select: { id: true, carName: true, carType: true, plateNumber: true, model: true } },
         customer: { select: { fullName: true, phoneNumber: true } },
         payments: { select: { id: true, amount: true, paymentDate: true, paymentMethod: true } },
       },
     });
 
-    sendSuccess(res, contracts);
+    sendSuccess(res, contracts.map(maskIfActive));
   } catch (err) {
     sendError(res, err.message);
   }

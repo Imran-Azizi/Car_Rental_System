@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ownerPortalAPI } from '@/lib/api';
 import { formatAfghanDate, formatNumber } from '@/lib/utils';
-import { Bell, BellOff, Check, CheckCheck, TrendingDown, Car, Wallet } from 'lucide-react';
+import { Bell, BellOff, Check, CheckCheck, TrendingDown, Car, Wallet, CalendarClock, CheckCircle2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface OwnerNotification {
@@ -63,13 +63,24 @@ export default function OwnerNotificationsPage() {
 
   const typeIcon = (type: string) => {
     if (type === 'EXPENSE') return <TrendingDown className="w-4 h-4 text-red-500" />;
+    if (type === 'BOOKING') return <CalendarClock className="w-4 h-4 text-blue-500" />;
+    if (type === 'RETURN')  return <CheckCircle2 className="w-4 h-4 text-emerald-600" />;
     if (type === 'CAR')     return <Car className="w-4 h-4 text-blue-500" />;
     return <Bell className="w-4 h-4 text-amber-500" />;
   };
 
   const typeLabel = (type: string) => {
-    if (type === 'EXPENSE') return { text: 'کسر مصرف', cls: 'bg-red-100 text-red-700' };
+    if (type === 'EXPENSE') return { text: 'کسر مصرف',    cls: 'bg-red-100 text-red-700' };
+    if (type === 'BOOKING') return { text: 'کرایه موتر',   cls: 'bg-blue-100 text-blue-700' };
+    if (type === 'RETURN')  return { text: 'برگشت موتر',   cls: 'bg-emerald-100 text-emerald-700' };
     return { text: 'اطلاعیه', cls: 'bg-amber-100 text-amber-700' };
+  };
+
+  const typeBg = (type: string, isRead: boolean) => {
+    if (isRead) return 'border-amber-100 bg-white';
+    if (type === 'BOOKING') return 'border-blue-200 bg-blue-50/40 shadow-sm';
+    if (type === 'RETURN')  return 'border-emerald-200 bg-emerald-50/40 shadow-sm';
+    return 'border-amber-300 bg-amber-50/60 shadow-sm';
   };
 
   return (
@@ -114,7 +125,7 @@ export default function OwnerNotificationsPage() {
           <div className="flex flex-col items-center justify-center py-16 rounded-2xl border-2 border-dashed border-amber-200 bg-amber-50/30">
             <BellOff className="w-12 h-12 text-amber-200 mb-3" />
             <p className="text-amber-400 font-medium">هیچ اعلانی وجود ندارد</p>
-            <p className="text-amber-300 text-sm mt-1">مصارف مرتبط با موترهای شما اینجا نمایش داده می‌شود</p>
+            <p className="text-amber-300 text-sm mt-1">اعلان‌های کرایه، برگشت موتر و مصارف اینجا نمایش داده می‌شود</p>
           </div>
         ) : (
           notifications.map(n => {
@@ -122,14 +133,15 @@ export default function OwnerNotificationsPage() {
             return (
               <div
                 key={n.id}
-                className={`rounded-2xl border-2 p-4 transition-all ${
-                  n.isRead
-                    ? 'border-amber-100 bg-white'
-                    : 'border-amber-300 bg-amber-50/60 shadow-sm'
-                }`}>
+                className={`rounded-2xl border-2 p-4 transition-all ${typeBg(n.type, n.isRead)}`}>
                 <div className="flex items-start gap-3">
                   {/* Icon */}
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${n.isRead ? 'bg-gray-100' : 'bg-amber-100'}`}>
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                    n.isRead ? 'bg-gray-100'
+                      : n.type === 'BOOKING' ? 'bg-blue-100'
+                      : n.type === 'RETURN'  ? 'bg-emerald-100'
+                      : 'bg-amber-100'
+                  }`}>
                     {typeIcon(n.type)}
                   </div>
 
@@ -137,18 +149,31 @@ export default function OwnerNotificationsPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-1">
                       <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${label.cls}`}>{label.text}</span>
-                      <h4 className={`text-sm font-bold ${n.isRead ? 'text-gray-700' : 'text-amber-900'}`}>{n.title}</h4>
-                      {!n.isRead && <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />}
+                      <h4 className={`text-sm font-bold ${
+                        n.isRead ? 'text-gray-700'
+                          : n.type === 'BOOKING' ? 'text-blue-900'
+                          : n.type === 'RETURN'  ? 'text-emerald-900'
+                          : 'text-amber-900'
+                      }`}>{n.title}</h4>
+                      {!n.isRead && (
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${
+                          n.type === 'BOOKING' ? 'bg-blue-500'
+                            : n.type === 'RETURN' ? 'bg-emerald-500'
+                            : 'bg-amber-500'
+                        }`} />
+                      )}
                     </div>
 
-                    {/* Amount badge */}
+                    {/* Amount badge — contextual wording per type */}
                     {n.amount != null && n.amount > 0 && (
                       <div className="flex items-center gap-1.5 mb-2">
-                        <Wallet className="w-3.5 h-3.5 text-red-500" />
-                        <span className="text-sm font-black text-red-600" dir="ltr">
+                        <Wallet className={`w-3.5 h-3.5 ${n.type === 'RETURN' ? 'text-emerald-600' : 'text-red-500'}`} />
+                        <span className={`text-sm font-black ${n.type === 'RETURN' ? 'text-emerald-700' : 'text-red-600'}`} dir="ltr">
                           {formatNumber(n.amount)} افغانی
                         </span>
-                        <span className="text-xs text-red-400">از حساب شما کسر شد</span>
+                        <span className={`text-xs ${n.type === 'RETURN' ? 'text-emerald-500' : 'text-red-400'}`}>
+                          {n.type === 'RETURN' ? 'سهم شما از قرارداد' : 'از حساب شما کسر شد'}
+                        </span>
                       </div>
                     )}
 

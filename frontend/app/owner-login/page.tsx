@@ -1,8 +1,9 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { ownerAuthAPI } from '@/lib/api';
-import { Eye, EyeOff, Car, Phone, Lock, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, Phone, Lock, AlertCircle } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:5000';
 
@@ -62,9 +63,21 @@ export default function OwnerLoginPage() {
       <div className="w-full max-w-md relative z-10">
         {/* Logo/Brand */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl mb-4 shadow-2xl"
-            style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}>
-            <Car className="w-10 h-10 text-white" />
+          <div className="inline-flex items-center justify-center w-28 h-28 rounded-3xl mb-5 shadow-2xl"
+            style={{
+              background: '#fff',
+              padding: '8px',
+              border: '3px solid rgba(245,158,11,0.4)',
+              boxShadow: '0 8px 32px rgba(245,158,11,0.25), 0 2px 8px rgba(0,0,0,0.3)',
+            }}>
+            <Image
+              src="/logo.png"
+              alt="مرکز کرایه موتر افشار"
+              width={100}
+              height={100}
+              className="object-contain w-full h-full"
+              priority
+            />
           </div>
           <h1 className="text-3xl font-bold text-white mb-1">مرکز کرایه موتر افشار</h1>
           <p className="text-amber-300 text-sm">پنل اختصاصی صاحب موتر</p>

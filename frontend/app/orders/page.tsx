@@ -7,11 +7,10 @@ import Badge from '@/components/ui/Badge';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { useApp } from '@/lib/context';
 import { ordersAPI } from '@/lib/api';
-import { Plus, Search, Eye, Trash2, CheckCircle, CreditCard, Printer, Pencil, Download, ZoomIn, ImageOff, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Search, Eye, Trash2, CheckCircle, CreditCard, Printer, Pencil, Download, ZoomIn, ImageOff, X, ChevronLeft, ChevronRight, Car, User, Shield, UserCheck, Receipt, FileImage, DollarSign, AlertTriangle, Clock, Edit2, Check as CheckIcon, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
-import ContractBill, { BillData } from '@/components/ContractBill';
-import { formatAfghanDate, formatCurrency as fmtCur, numericInputProps } from '@/lib/utils';
+import { formatAfghanDate, formatCurrency as fmtCur, numericInputProps, numericInputHandler, formatNumber } from '@/lib/utils';
 
 const STATUS_LIST = ['ACTIVE', 'COMPLETED', 'CANCELLED', 'OVERDUE'] as const;
 const statusMap: any = {
@@ -24,6 +23,18 @@ const statusMap: any = {
 const inputCls = 'w-full px-3 py-2 rounded-lg input-golden text-sm';
 const labelCls = 'block text-sm font-medium text-amber-800 mb-1';
 
+/* ── 24-hour edit window helper ──────────────────────────────────── */
+function canEditOrder(order: any): { allowed: boolean; reason?: string } {
+  if (order.status !== 'COMPLETED') return { allowed: true };
+  if (!order.completedAt)            return { allowed: false, reason: 'expired' };
+  const elapsedHours = (Date.now() - new Date(order.completedAt).getTime()) / 3_600_000;
+  if (elapsedHours <= 24)            return { allowed: true };
+  return {
+    allowed: false,
+    reason: `ویرایش فقط تا ۲۴ ساعت بعد از تکمیل مجاز است. (${Math.floor(elapsedHours)} ساعت گذشته)`,
+  };
+}
+
 export default function AllOrdersPage() {
   const { t, token, lang } = useApp();
   const router = useRouter();
@@ -34,53 +45,24 @@ export default function AllOrdersPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [viewOrder, setViewOrder] = useState<any>(null);
   const [paymentModal, setPaymentModal] = useState<any>(null);
-  const [paymentForm, setPaymentForm] = useState({ amount: '', paymentMethod: '', notes: '' });
+  const [paymentForm, setPaymentForm] = useState({ amount: '', notes: '' });
+  const [pendingReturnId, setPendingReturnId] = useState<string | null>(null);
   const [savingPayment, setSavingPayment] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [returnId, setReturnId] = useState<string | null>(null);
-  const [printBill, setPrintBill] = useState<BillData | null>(null);
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
+
+  /* ── Inline total-rent cell editor ── */
+  const [editingRentId,   setEditingRentId]   = useState<string | null>(null);
+  const [totalRentInput,  setTotalRentInput]  = useState('');
+  const [savingTotalRent, setSavingTotalRent] = useState(false);
+  const [totalRentError,  setTotalRentError]  = useState('');
 
   const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api').replace('/api', '');
   const imgUrl = (p: string | null | undefined) => (p ? `${API_BASE}${p}` : null);
 
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [debouncedSearch, setDebouncedSearch] = useState('');
-
-  const buildBillData = (c: any): BillData => ({
-    contractNumber:          c.contractNumber,
-    carName:                 c.car?.carName || '',
-    model:                   c.car?.model || '',
-    color:                   c.car?.color || '',
-    plateNumber:             c.car?.plateNumber || '',
-    dailyRate:               c.dailyRate || c.car?.dailyRate || 0,
-    totalRent:               c.totalRent,
-    advancePayment:          c.advancePayment,
-    remainingAmount:         c.remainingAmount,
-    startDate:               c.startDate,
-    startTime:               c.startTime,
-    endDate:                 c.endDate,
-    endTime:                 c.endTime,
-    carStatus:               c.car?.status,
-    customerFullName:        c.customer?.fullName || '',
-    customerFatherName:      c.customer?.fatherName || '',
-    customerDistrict:        c.customer?.district,
-    customerVillage:         c.customer?.village,
-    customerProvince:        c.customer?.province,
-    customerCurrentAddress:  c.customer?.currentAddress,
-    customerTazkira:         c.customer?.tazkiraNumber,
-    customerPhone:           c.customer?.phoneNumber,
-    guarantorFullName:       c.guarantor?.fullName,
-    guarantorFatherName:     c.guarantor?.fatherName,
-    guarantorDistrict:       c.guarantor?.district,
-    guarantorVillage:        c.guarantor?.village,
-    guarantorProvince:       c.guarantor?.province,
-    guarantorCurrentAddress: c.guarantor?.currentAddress,
-    guarantorTazkira:        c.guarantor?.tazkiraNumber,
-    guarantorPhone:          c.guarantor?.phoneNumber,
-    notes:                   c.notes,
-    customerPhoto:           c.customer?.photo,
-  });
 
   // Debounce search input
   useEffect(() => {
@@ -100,6 +82,37 @@ export default function AllOrdersPage() {
       const res = await ordersAPI.getAll({ search: debouncedSearch, status: statusFilter });
       setOrders(res.data.data);
     } catch { toast.error(t.error); } finally { setLoading(false); }
+  };
+
+  /* ── Save updated مجموع کرایه (inline cell edit) ── */
+  const handleSaveTotalRent = async (orderId: string) => {
+    const parsed = parseFloat(totalRentInput.replace(/,/g, ''));
+    if (isNaN(parsed) || parsed <= 0) {
+      setTotalRentError(lang === 'dari' ? 'مقدار معتبر وارد کنید' : 'سمه عدد ولیکئ');
+      return;
+    }
+    setTotalRentError('');
+    setSavingTotalRent(true);
+    try {
+      const res = await ordersAPI.update(orderId, { totalRent: parsed });
+      const updated = res.data.data;
+      /* Patch the row in-place so the list updates without a full refetch */
+      setOrders(prev => prev.map(o =>
+        o.id === orderId
+          ? { ...o, totalRent: updated.totalRent, remainingAmount: updated.remainingAmount,
+              ownerShare: updated.ownerShare, adminShare: updated.adminShare,
+              liveFinalTotal: updated.liveFinalTotal ?? updated.totalRent }
+          : o,
+      ));
+      setEditingRentId(null);
+      toast.success(lang === 'dari' ? 'مجموع کرایه بروز شد' : 'د کرایې مجموع تازه شو');
+    } catch (err: any) {
+      const msg = err.response?.data?.message || t.error;
+      setTotalRentError(msg);
+      toast.error(msg);
+    } finally {
+      setSavingTotalRent(false);
+    }
   };
 
   const handleReturn = async (id: string) => {
@@ -122,11 +135,33 @@ export default function AllOrdersPage() {
     if (!paymentForm.amount) return toast.error(t.enterAmount);
     setSavingPayment(true);
     try {
-      await ordersAPI.addPayment(paymentModal.id, paymentForm);
+      const payRes = await ordersAPI.addPayment(paymentModal.id, paymentForm);
+      /* Backend now returns { payment, remainingAmount } */
+      const newRemaining: number = payRes.data.data?.remainingAmount ?? 0;
+
       toast.success(t.paymentSaved);
+      const returnAfter = pendingReturnId;
       setPaymentModal(null);
-      setPaymentForm({ amount: '', paymentMethod: '', notes: '' });
+      setPendingReturnId(null);
+      setPaymentForm({ amount: '', notes: '' });
       fetchData();
+
+      /* Only mark as returned when the balance is fully settled */
+      if (returnAfter) {
+        if (newRemaining === 0) {
+          await ordersAPI.markReturned(returnAfter);
+          toast.success(t.markReturned);
+          fetchData();
+        } else {
+          /* Partial payment — keep order active, inform admin */
+          toast(
+            lang === 'dari'
+              ? `پرداخت ثبت شد. باقی‌مانده: ${newRemaining.toLocaleString('en-US')} ${t.currency} — سفارش همچنان فعال است.`
+              : `تادیه ثبت شوه. پاتې: ${newRemaining.toLocaleString('en-US')} ${t.currency} — سفارش لا هم فعال دی.`,
+            { icon: '⚠️', duration: 5000 },
+          );
+        }
+      }
     } catch { toast.error(t.error); } finally { setSavingPayment(false); }
   };
 
@@ -138,10 +173,12 @@ export default function AllOrdersPage() {
   useEffect(() => { setLightboxIdx(null); }, [viewOrder]);
 
   const orderImages = viewOrder ? [
-    { url: imgUrl(viewOrder.customer?.photo),    label: lang === 'dari' ? 'عکس مشتری'         : 'د مشتري انځور',   filename: 'customer-photo' },
-    { url: imgUrl(viewOrder.guarantor?.photo),   label: lang === 'dari' ? 'عکس ضامن'          : 'د ضامن انځور',    filename: 'guarantor-photo' },
-    { url: imgUrl(viewOrder.billDocPhoto),        label: lang === 'dari' ? 'عکس بل / قرارداد'  : 'د بل انځور',      filename: 'bill-doc' },
-    { url: imgUrl(viewOrder.tazkiraDocPhoto),     label: lang === 'dari' ? 'عکس تذکره / هویت' : 'د تذکرې انځور',  filename: 'tazkira-doc' },
+    { url: imgUrl(viewOrder.customer?.photo),    label: lang === 'dari' ? 'عکس مشتری'          : 'د مشتري انځور',      filename: 'customer-photo' },
+    { url: imgUrl(viewOrder.guarantor?.photo),   label: lang === 'dari' ? 'عکس ضامن (۱)'       : 'د ضامن انځور (۱)',   filename: 'guarantor-photo-1' },
+    { url: imgUrl(viewOrder.guarantor?.photo2),  label: lang === 'dari' ? 'عکس ضامن (۲)'       : 'د ضامن انځور (۲)',   filename: 'guarantor-photo-2' },
+    { url: imgUrl(viewOrder.billDocPhoto),        label: lang === 'dari' ? 'عکس بل / قرارداد'   : 'د بل انځور',         filename: 'bill-doc' },
+    { url: imgUrl(viewOrder.tazkiraDocPhoto),     label: lang === 'dari' ? 'عکس تذکره (۱)'      : 'د تذکرې انځور (۱)', filename: 'tazkira-doc-1' },
+    { url: imgUrl(viewOrder.tazkiraDocPhoto2),    label: lang === 'dari' ? 'عکس تذکره (۲)'      : 'د تذکرې انځور (۲)', filename: 'tazkira-doc-2' },
   ].filter((img): img is { url: string; label: string; filename: string } => !!img.url) : [];
 
   const downloadImage = async (url: string, filename: string) => {
@@ -236,9 +273,20 @@ export default function AllOrdersPage() {
                   <tr>
                     <td colSpan={9} className="px-4 py-8 text-center text-amber-500">{t.noData}</td>
                   </tr>
-                ) : orders.map(c => (
-                  <tr key={c.id} className="border-b border-amber-100">
-                    <td className="px-4 py-3 text-xs font-mono text-amber-700">{c.contractNumber}</td>
+                ) : orders.map(c => {
+                  const isOverdue = c.status === 'OVERDUE';
+                  const overdueDays = c.liveOverdueDays ?? 0;
+                  const overdueCharge = c.liveOverdueCharges ?? 0;
+                  const finalTotal = c.liveFinalTotal ?? c.totalRent;
+                  return (
+                  <tr key={c.id}
+                    className={`border-b transition-colors ${isOverdue ? 'bg-red-50/60 border-red-200 hover:bg-red-50' : 'border-amber-100 hover:bg-amber-50/30'}`}>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1.5">
+                        {isOverdue && <AlertTriangle className="w-3.5 h-3.5 text-red-500 shrink-0" />}
+                        <span className="text-xs font-mono text-amber-700">{c.contractNumber}</span>
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-sm">
                       <div>{c.customer?.fullName}</div>
                       <div className="text-xs text-amber-500">{c.customer?.phoneNumber}</div>
@@ -248,9 +296,95 @@ export default function AllOrdersPage() {
                       <div className="text-xs text-amber-500">{c.car?.plateNumber}</div>
                     </td>
                     <td className="px-4 py-3 text-xs">{formatDate(c.startDate)}</td>
-                    <td className="px-4 py-3 text-xs">{formatDate(c.endDate)}</td>
-                    <td className="px-4 py-3 text-sm font-medium">{formatCurrency(c.totalRent)}</td>
-                    <td className="px-4 py-3 text-sm text-red-600 font-medium">{formatCurrency(c.remainingAmount)}</td>
+                    <td className="px-4 py-3 text-xs">
+                      <div>{formatDate(c.endDate)}</div>
+                      {isOverdue && overdueDays > 0 && (
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <Clock className="w-3 h-3 text-red-500" />
+                          <span className="text-xs font-bold text-red-600">+{overdueDays} {lang === 'dari' ? 'روز تاخیر' : 'ورځ ناوخته'}</span>
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2" style={{ minWidth: '148px' }}>
+                      {editingRentId === c.id ? (
+                        /* ── Inline edit form ── */
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-1">
+                            <input
+                              value={totalRentInput}
+                              onChange={numericInputHandler(v => { setTotalRentInput(v); setTotalRentError(''); })}
+                              inputMode="decimal"
+                              dir="ltr"
+                              autoFocus
+                              className="w-24 px-2 py-1.5 rounded-lg border-2 border-amber-400 bg-amber-50 text-sm font-bold text-amber-900 outline-none focus:border-amber-600 focus:ring-2 focus:ring-amber-200 transition-all"
+                              onKeyDown={e => {
+                                if (e.key === 'Enter')  handleSaveTotalRent(c.id);
+                                if (e.key === 'Escape') { setEditingRentId(null); setTotalRentError(''); }
+                              }}
+                            />
+                            {/* Save */}
+                            <button
+                              onClick={() => handleSaveTotalRent(c.id)}
+                              disabled={savingTotalRent}
+                              className="p-1.5 rounded-lg bg-green-500 hover:bg-green-600 text-white transition-colors disabled:opacity-50 shrink-0"
+                              title={lang === 'dari' ? 'ذخیره' : 'خوندي کول'}
+                            >
+                              {savingTotalRent
+                                ? <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                : <CheckIcon className="w-3.5 h-3.5" />}
+                            </button>
+                            {/* Cancel */}
+                            <button
+                              onClick={() => { setEditingRentId(null); setTotalRentError(''); }}
+                              disabled={savingTotalRent}
+                              className="p-1.5 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-600 transition-colors disabled:opacity-50 shrink-0"
+                              title={lang === 'dari' ? 'لغو' : 'لغوه'}
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          {totalRentError && (
+                            <p className="text-[10px] text-red-600 font-medium flex items-center gap-0.5">
+                              <AlertTriangle className="w-2.5 h-2.5 shrink-0" />{totalRentError}
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        /* ── Display mode ── */
+                        <div className="flex items-center gap-1.5 group">
+                          <div>
+                            <div className="text-sm font-medium">{formatCurrency(c.totalRent)}</div>
+                            {isOverdue && overdueCharge > 0 && (
+                              <div className="text-xs font-bold text-red-600">+{formatCurrency(overdueCharge)} {lang === 'dari' ? 'جریمه' : 'جریمه'}</div>
+                            )}
+                          </div>
+                          {/* Edit icon — only when canEdit */}
+                          {canEditOrder(c).allowed && (
+                            <button
+                              onClick={() => {
+                                setEditingRentId(c.id);
+                                setTotalRentInput(String(c.totalRent ?? 0));
+                                setTotalRentError('');
+                              }}
+                              className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-amber-500 hover:bg-amber-100 hover:text-amber-700 transition-all shrink-0"
+                              title={lang === 'dari' ? 'ویرایش مجموع کرایه' : 'د کرایې مجموع سمول'}
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className={`text-sm font-medium ${c.remainingAmount > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                        {formatCurrency(c.remainingAmount)}
+                      </div>
+                      {isOverdue && overdueCharge > 0 && (
+                        <div className="text-xs font-bold text-red-700 bg-red-100 px-1.5 py-0.5 rounded mt-0.5 inline-block">
+                          {lang === 'dari' ? 'مجموع:' : 'ټول:'} {formatCurrency(finalTotal)}
+                        </div>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <Badge variant={statusMap[c.status]?.variant} label={statusMap[c.status]?.[lang] || c.status} />
                     </td>
@@ -263,31 +397,51 @@ export default function AllOrdersPage() {
                           <Eye className="w-3.5 h-3.5" />
                           {lang === 'dari' ? 'مشاهده' : 'کتل'}
                         </button>
+                        {(() => {
+                          const { allowed, reason } = canEditOrder(c);
+                          return allowed ? (
+                            <button
+                              onClick={() => router.push(`/orders/new?edit=${c.id}`)}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-orange-700 bg-orange-50 hover:bg-orange-100 transition-colors border border-orange-200"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                              {lang === 'dari' ? 'ویرایش' : 'سمول'}
+                            </button>
+                          ) : (
+                            <span
+                              title={reason}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-gray-400 bg-gray-50 border border-gray-200 cursor-not-allowed select-none"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                              {lang === 'dari' ? 'ویرایش' : 'سمول'}
+                            </span>
+                          );
+                        })()}
                         <button
-                          onClick={() => router.push(`/orders/new?edit=${c.id}`)}
-                          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-orange-700 bg-orange-50 hover:bg-orange-100 transition-colors border border-orange-200"
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                          {lang === 'dari' ? 'ویرایش' : 'سمول'}
-                        </button>
-                        <button
-                          onClick={() => setPrintBill(buildBillData(c))}
+                          onClick={() => router.push(`/orders/print/${c.id}`)}
                           className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 transition-colors border border-purple-200"
                         >
                           <Printer className="w-3.5 h-3.5" />
                           {lang === 'dari' ? 'چاپ بل' : 'بل'}
                         </button>
-                        {c.status === 'ACTIVE' && (
+                        {(c.status === 'ACTIVE' || c.status === 'OVERDUE') && (
                           <>
                             <button
-                              onClick={() => setPaymentModal(c)}
+                              onClick={() => { setPaymentModal(c); setPendingReturnId(null); }}
                               className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 transition-colors border border-green-200"
                             >
                               <CreditCard className="w-3.5 h-3.5" />
                               {lang === 'dari' ? 'پرداخت' : 'تادیه'}
                             </button>
                             <button
-                              onClick={() => setReturnId(c.id)}
+                              onClick={() => {
+                                if ((c.remainingAmount ?? 0) > 0) {
+                                  setPendingReturnId(c.id);
+                                  setPaymentModal(c);
+                                } else {
+                                  setReturnId(c.id);
+                                }
+                              }}
                               className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors border border-blue-200"
                             >
                               <CheckCircle className="w-3.5 h-3.5" />
@@ -305,7 +459,8 @@ export default function AllOrdersPage() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -316,126 +471,241 @@ export default function AllOrdersPage() {
       {viewOrder && (
         <Modal
           open={!!viewOrder}
-          onClose={() => setViewOrder(null)}
+          onClose={() => { setViewOrder(null); setTotalRentError(''); }}
           title={`${lang === 'dari' ? 'جزئیات سفارش' : 'د سفارش جزئیات'} — ${viewOrder.contractNumber}`}
           size="xl"
         >
           <div className="space-y-5">
 
-            {/* Car & Rental Overview */}
-            <div>
-              <h4 className="text-xs font-bold text-amber-700 uppercase tracking-wider mb-2 flex items-center gap-2">
-                <span className="w-4 h-0.5 bg-amber-400 inline-block" />
-                {t.carInfo}
-              </h4>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {[
-                  { label: t.carName,         value: viewOrder.car?.carName },
-                  { label: t.plateNumber,     value: viewOrder.car?.plateNumber },
-                  { label: t.startDate,       value: `${formatDate(viewOrder.startDate)}${viewOrder.startTime ? '  ' + viewOrder.startTime : ''}` },
-                  { label: t.endDate,         value: `${formatDate(viewOrder.endDate)}${viewOrder.endTime ? '  ' + viewOrder.endTime : ''}` },
-                  { label: t.totalRent,       value: formatCurrency(viewOrder.totalRent),       cls: 'font-bold text-amber-900' },
-                  { label: t.advancePayment,  value: formatCurrency(viewOrder.advancePayment),  cls: 'font-bold text-green-700' },
-                  { label: t.remainingAmount, value: formatCurrency(viewOrder.remainingAmount), cls: 'font-bold text-red-600' },
-                  { label: t.status,          value: statusMap[viewOrder.status]?.[lang] || viewOrder.status },
-                ].map(({ label, value, cls }: any) => (
-                  <div key={label} className="bg-amber-50 rounded-xl p-3 border border-amber-100">
-                    <p className="text-xs text-amber-600 mb-0.5">{label}</p>
-                    <p className={`text-sm ${cls || 'text-amber-900 font-medium'}`}>{value || '—'}</p>
-                  </div>
-                ))}
+            {/* ── Status Banner ── */}
+            <div className="flex items-center justify-between px-4 py-3 rounded-2xl border"
+              style={{
+                background: viewOrder.status === 'ACTIVE'    ? 'linear-gradient(135deg,#d1fae5,#ecfdf5)' :
+                            viewOrder.status === 'COMPLETED' ? 'linear-gradient(135deg,#e0f2fe,#f0f9ff)' :
+                            viewOrder.status === 'CANCELLED' ? 'linear-gradient(135deg,#fee2e2,#fff1f2)' :
+                            viewOrder.status === 'OVERDUE'   ? 'linear-gradient(135deg,#fff1f2,#ffe4e6)' :
+                            'linear-gradient(135deg,#fef3c7,#fefce8)',
+                borderColor: viewOrder.status === 'ACTIVE'    ? '#6ee7b7' :
+                             viewOrder.status === 'COMPLETED' ? '#7dd3fc' :
+                             viewOrder.status === 'CANCELLED' ? '#fca5a5' :
+                             viewOrder.status === 'OVERDUE'   ? '#fca5a5' : '#fde68a',
+              }}>
+              <div className="flex items-center gap-3">
+                <span className="text-2xl font-black text-gray-800 font-mono">{viewOrder.contractNumber}</span>
+                <Badge variant={statusMap[viewOrder.status]?.variant} label={statusMap[viewOrder.status]?.[lang]} />
               </div>
+              <div className="text-xs text-gray-500">{formatDate(viewOrder.createdAt || viewOrder.startDate)}</div>
             </div>
 
-            {/* Customer Details */}
-            <div>
-              <h4 className="text-xs font-bold text-amber-700 uppercase tracking-wider mb-2 flex items-center gap-2">
-                <span className="w-4 h-0.5 bg-amber-400 inline-block" />
-                {t.customerInfo}
-              </h4>
-              <div className="bg-amber-50 rounded-xl border border-amber-200 p-4">
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
-                  {[
-                    { label: t.fullName,         value: viewOrder.customer?.fullName },
-                    { label: t.fatherName,       value: viewOrder.customer?.fatherName },
-                    { label: t.grandfatherName,  value: viewOrder.customer?.grandfatherName },
-                    { label: t.tazkiraNumber,    value: viewOrder.customer?.tazkiraNumber },
-                    { label: t.phone,            value: viewOrder.customer?.phoneNumber, ltr: true },
-                    { label: t.occupation,       value: viewOrder.customer?.occupation },
-                    { label: t.province,         value: viewOrder.customer?.province },
-                    { label: t.district,         value: viewOrder.customer?.district },
-                    { label: t.village,          value: viewOrder.customer?.village },
-                    { label: t.currentAddress,   value: viewOrder.customer?.currentAddress,  span: true },
-                    { label: t.permanentAddress, value: viewOrder.customer?.permanentAddress, span: true },
-                    { label: t.notes,            value: viewOrder.customer?.notes,            span: true },
-                  ].map(({ label, value, ltr, span }: any) => (
-                    <div key={label} className={span ? 'col-span-2 sm:col-span-3' : ''}>
-                      <p className="text-xs text-amber-600 font-medium mb-0.5">{label}</p>
-                      <p className="text-sm text-amber-900 font-medium" dir={ltr ? 'ltr' : undefined}>{value || '—'}</p>
-                    </div>
-                  ))}
+            {/* ── Section Helper ── */}
+            {/* Section 1: Car Information */}
+            <SectionTable
+              icon={<Car className="w-4 h-4" />}
+              title={lang === 'dari' ? 'معلومات موتر' : 'د موتر معلومات'}
+              color="#d97706"
+              rows={[
+                [lang === 'dari' ? 'نام موتر' : 'د موتر نوم', viewOrder.car?.carName],
+                [lang === 'dari' ? 'نمبر پلیت' : 'بلیت نمبر', viewOrder.car?.plateNumber],
+                [lang === 'dari' ? 'مدل' : 'ماډل', viewOrder.car?.model],
+                [lang === 'dari' ? 'رنگ' : 'رنګ', viewOrder.car?.color],
+              ]}
+            />
+
+            {/* Section 2: Rental Details */}
+            <SectionTable
+              icon={<Receipt className="w-4 h-4" />}
+              title={lang === 'dari' ? 'جزئیات کرایه' : 'د کرایې جزئیات'}
+              color="#059669"
+              rows={[
+                [lang === 'dari' ? 'تاریخ تحویل' : 'د ورلو نیټه', `${formatDate(viewOrder.startDate)}${viewOrder.startTime ? '  ' + viewOrder.startTime : ''}`],
+                [lang === 'dari' ? 'تاریخ برگشت' : 'د راستون نیټه', `${formatDate(viewOrder.endDate)}${viewOrder.endTime ? '  ' + viewOrder.endTime : ''}`],
+                [lang === 'dari' ? 'کرایه روزانه' : 'ورځنۍ کرایه', formatCurrency(viewOrder.rentPrice || viewOrder.dailyRate || 0), false, 'text-amber-800 font-bold'],
+                [lang === 'dari' ? 'مجموع کرایه' : 'ټوله کرایه', formatCurrency(viewOrder.totalRent), false, 'text-amber-900 font-black text-base'],
+              ]}
+            />
+
+            {/* Section 3: Payment Information */}
+            <SectionTable
+              icon={<DollarSign className="w-4 h-4" />}
+              title={lang === 'dari' ? 'اطلاعات مالی' : 'مالي معلومات'}
+              color="#7c3aed"
+              rows={[
+                [lang === 'dari' ? 'پیش پرداخت' : 'مخکنۍ تادیه', formatCurrency(viewOrder.advancePayment), false, 'text-green-700 font-bold'],
+                [lang === 'dari' ? 'باقی مانده' : 'پاتې مبلغ', formatCurrency(viewOrder.remainingAmount), false, viewOrder.remainingAmount > 0 ? 'text-red-600 font-bold' : 'text-green-700 font-bold'],
+                [lang === 'dari' ? 'سهم صاحب موتر' : 'د موتر د خاوند برخه', formatCurrency(viewOrder.ownerShare || 0)],
+                [lang === 'dari' ? 'سهم ادمین' : 'د ادمین برخه', formatCurrency(viewOrder.adminShare || 0)],
+              ]}
+            />
+
+            {/* Section 3b: Overdue Charges — shown when order is OVERDUE or has frozen overdueCharges */}
+            {(viewOrder.status === 'OVERDUE' || (viewOrder.liveOverdueCharges > 0) || (viewOrder.overdueCharges > 0)) && (
+              <div className="rounded-2xl overflow-hidden border-2 border-red-300">
+                {/* Header */}
+                <div className="flex items-center gap-2 px-4 py-3"
+                  style={{ background: 'linear-gradient(135deg,#dc2626,#b91c1c)' }}>
+                  <AlertTriangle className="w-4 h-4 text-white" />
+                  <h4 className="text-sm font-bold text-white">
+                    {lang === 'dari' ? 'محاسبه تأخیر / ناوقت' : 'د ناوخته حساب'}
+                  </h4>
+                  {viewOrder.status === 'OVERDUE' && (
+                    <span className="mr-auto text-xs font-bold bg-white/20 text-white px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      {lang === 'dari' ? 'در حال تأخیر' : 'اوس ناوخته دی'}
+                    </span>
+                  )}
                 </div>
-              </div>
-            </div>
-
-            {/* Guarantor Details */}
-            {viewOrder.guarantor && (
-              <div>
-                <h4 className="text-xs font-bold text-amber-700 uppercase tracking-wider mb-2 flex items-center gap-2">
-                  <span className="w-4 h-0.5 bg-amber-400 inline-block" />
-                  {t.guarantorInfo}
-                </h4>
-                <div className="bg-purple-50 rounded-xl border border-purple-200 p-4">
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
+                {/* Body */}
+                <div className="p-4 bg-red-50 space-y-3">
+                  {/* Stats row */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {[
-                      { label: t.fullName,        value: viewOrder.guarantor?.fullName },
-                      { label: t.fatherName,      value: viewOrder.guarantor?.fatherName },
-                      { label: t.grandfatherName, value: viewOrder.guarantor?.grandfatherName },
-                      { label: t.tazkiraNumber,   value: viewOrder.guarantor?.tazkiraNumber },
-                      { label: t.phone,           value: viewOrder.guarantor?.phoneNumber, ltr: true },
-                      { label: t.relationship,    value: viewOrder.guarantor?.relationship },
-                      { label: t.province,        value: viewOrder.guarantor?.province },
-                      { label: t.district,        value: viewOrder.guarantor?.district },
-                      { label: t.village,         value: viewOrder.guarantor?.village },
-                      { label: t.currentAddress,  value: viewOrder.guarantor?.currentAddress, span: true },
-                      { label: t.notes,           value: viewOrder.guarantor?.notes,           span: true },
-                    ].map(({ label, value, ltr, span }: any) => (
-                      <div key={label} className={span ? 'col-span-2 sm:col-span-3' : ''}>
-                        <p className="text-xs text-purple-600 font-medium mb-0.5">{label}</p>
-                        <p className="text-sm text-purple-900 font-medium" dir={ltr ? 'ltr' : undefined}>{value || '—'}</p>
+                      {
+                        label: lang === 'dari' ? 'کرایه اصلی' : 'اصلي کرایه',
+                        value: formatCurrency(viewOrder.totalRent),
+                        cls: 'text-gray-800',
+                        bg: 'bg-white border-gray-200',
+                      },
+                      {
+                        label: lang === 'dari' ? 'کرایه روزانه' : 'ورځنۍ کرایه',
+                        value: formatCurrency(viewOrder.rentPrice || 0),
+                        cls: 'text-amber-700',
+                        bg: 'bg-amber-50 border-amber-200',
+                      },
+                      {
+                        label: lang === 'dari' ? 'روزهای تأخیر' : 'د ناوخته ورځې',
+                        value: `${viewOrder.liveOverdueDays ?? 0} ${lang === 'dari' ? 'روز' : 'ورځ'}`,
+                        cls: 'text-red-700 font-black',
+                        bg: 'bg-red-100 border-red-300',
+                      },
+                      {
+                        label: lang === 'dari' ? 'جریمه تأخیر' : 'د ناوخته جریمه',
+                        value: formatCurrency(viewOrder.liveOverdueCharges ?? viewOrder.overdueCharges ?? 0),
+                        cls: 'text-red-700 font-black',
+                        bg: 'bg-red-100 border-red-300',
+                      },
+                    ].map(({ label, value, cls, bg }) => (
+                      <div key={label} className={`rounded-xl p-3 border text-center ${bg}`}>
+                        <p className="text-xs text-gray-500 mb-1">{label}</p>
+                        <p className={`text-sm font-bold ${cls}`}>{value}</p>
                       </div>
                     ))}
                   </div>
+                  {/* Final total */}
+                  <div className="flex items-center justify-between px-4 py-3 rounded-xl border-2 border-red-400 bg-red-100">
+                    <span className="text-sm font-bold text-red-800">
+                      {lang === 'dari' ? 'مجموع نهایی (اصلی + جریمه)' : 'وروستی ټول (اصلي + جریمه)'}
+                    </span>
+                    <span className="text-xl font-black text-red-900">
+                      {formatCurrency(viewOrder.liveFinalTotal ?? (viewOrder.totalRent + (viewOrder.liveOverdueCharges ?? viewOrder.overdueCharges ?? 0)))}
+                    </span>
+                  </div>
                 </div>
               </div>
             )}
 
-            {/* Payment History */}
+            {/* Section 4: Customer Information */}
+            <SectionTable
+              icon={<User className="w-4 h-4" />}
+              title={lang === 'dari' ? 'معلومات مشتری' : 'د مشتري معلومات'}
+              color="#2563eb"
+              rows={[
+                [lang === 'dari' ? 'نام و تخلص' : 'نوم او تخلص', viewOrder.customer?.fullName],
+                [lang === 'dari' ? 'نام پدر' : 'د پلار نوم', viewOrder.customer?.fatherName],
+                [lang === 'dari' ? 'نام پدرکلان' : 'د نیکه نوم', viewOrder.customer?.grandfatherName],
+                [lang === 'dari' ? 'نمبر تذکره' : 'د تذکرې نمبر', viewOrder.customer?.tazkiraNumber],
+                [lang === 'dari' ? 'شماره تلفن' : 'تلیفون شمیره', viewOrder.customer?.phoneNumber, true],
+                [lang === 'dari' ? 'شغل' : 'مسلک', viewOrder.customer?.occupation],
+                [lang === 'dari' ? 'ولایت' : 'ولایت', viewOrder.customer?.province],
+                [lang === 'dari' ? 'ناحیه' : 'ناحیه', viewOrder.customer?.district],
+                [lang === 'dari' ? 'قریه' : 'ولسوالۍ', viewOrder.customer?.village],
+                [lang === 'dari' ? 'آدرس فعلی' : 'اوسنی پته', viewOrder.customer?.currentAddress],
+                [lang === 'dari' ? 'آدرس دایمی' : 'دایمي پته', viewOrder.customer?.permanentAddress],
+              ].filter(r => r[1]) as [string, any, boolean?, string?][]}
+            />
+
+            {/* Section 5: Guarantor Information */}
+            {viewOrder.guarantor && (
+              <SectionTable
+                icon={<Shield className="w-4 h-4" />}
+                title={lang === 'dari' ? 'معلومات ضامن' : 'د ضامن معلومات'}
+                color="#7c3aed"
+                rows={[
+                  [lang === 'dari' ? 'نام و تخلص' : 'نوم او تخلص', viewOrder.guarantor.fullName],
+                  [lang === 'dari' ? 'نام پدر' : 'د پلار نوم', viewOrder.guarantor.fatherName],
+                  [lang === 'dari' ? 'نام پدرکلان' : 'د نیکه نوم', viewOrder.guarantor.grandfatherName],
+                  [lang === 'dari' ? 'نمبر تذکره' : 'د تذکرې نمبر', viewOrder.guarantor.tazkiraNumber],
+                  [lang === 'dari' ? 'شماره تلفن' : 'تلیفون شمیره', viewOrder.guarantor.phoneNumber, true],
+                  [lang === 'dari' ? 'رابطه' : 'اړیکه', viewOrder.guarantor.relationship],
+                  [lang === 'dari' ? 'ولایت' : 'ولایت', viewOrder.guarantor.province],
+                  [lang === 'dari' ? 'ناحیه' : 'ناحیه', viewOrder.guarantor.district],
+                  [lang === 'dari' ? 'آدرس فعلی' : 'اوسنی پته', viewOrder.guarantor.currentAddress],
+                ].filter(r => r[1]) as [string, any, boolean?, string?][]}
+              />
+            )}
+
+            {/* Section 6: Driver Information */}
+            {(viewOrder.driverName || viewOrder.driverLicense || viewOrder.driverPhone) && (
+              <SectionTable
+                icon={<UserCheck className="w-4 h-4" />}
+                title={lang === 'dari' ? 'معلومات راننده' : 'د دریور معلومات'}
+                color="#0891b2"
+                rows={[
+                  [lang === 'dari' ? 'نام راننده' : 'د دریور نوم', viewOrder.driverName],
+                  [lang === 'dari' ? 'نمبر لیسنس' : 'لیسنس نمبر', viewOrder.driverLicense, true],
+                  [lang === 'dari' ? 'شماره تلفن' : 'تلیفون', viewOrder.driverPhone, true],
+                ].filter(r => r[1]) as [string, any, boolean?, string?][]}
+              />
+            )}
+
+            {/* Section 7: Payment History */}
             {viewOrder.payments?.length > 0 && (
               <div>
-                <h4 className="text-xs font-bold text-amber-700 uppercase tracking-wider mb-2 flex items-center gap-2">
-                  <span className="w-4 h-0.5 bg-amber-400 inline-block" />
-                  {t.payments}
-                </h4>
-                <div className="space-y-2">
-                  {viewOrder.payments.map((p: any) => (
-                    <div key={p.id} className="flex justify-between items-center p-3 bg-green-50 rounded-lg border border-green-200 text-sm">
-                      <span className="text-green-800 font-bold">{formatCurrency(p.amount)}</span>
-                      <span className="text-green-600 text-xs">{formatAfghanDate(p.paymentDate)}</span>
-                      {p.notes && <span className="text-green-600 text-xs">{p.notes}</span>}
-                    </div>
-                  ))}
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs"
+                    style={{ background: 'linear-gradient(135deg,#059669,#047857)' }}>
+                    <DollarSign className="w-4 h-4" />
+                  </div>
+                  <h4 className="text-sm font-bold text-gray-800">
+                    {lang === 'dari' ? 'تاریخچه پرداخت‌ها' : 'د تادیو تاریخچه'}
+                  </h4>
+                </div>
+                <div className="rounded-2xl border border-green-200 overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr style={{ background: 'linear-gradient(135deg,#059669,#047857)' }}>
+                        <th className="px-4 py-2.5 text-right text-white text-xs font-semibold">#</th>
+                        <th className="px-4 py-2.5 text-right text-white text-xs font-semibold">{lang === 'dari' ? 'مبلغ' : 'مبلغ'}</th>
+                        <th className="px-4 py-2.5 text-right text-white text-xs font-semibold">{lang === 'dari' ? 'تاریخ' : 'نیټه'}</th>
+                        <th className="px-4 py-2.5 text-right text-white text-xs font-semibold">{lang === 'dari' ? 'یادداشت' : 'نوټ'}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {viewOrder.payments.map((p: any, i: number) => (
+                        <tr key={p.id} className={i % 2 === 0 ? 'bg-white' : 'bg-green-50/50'}>
+                          <td className="px-4 py-2.5 text-green-600 font-medium text-xs border-b border-green-100">{i + 1}</td>
+                          <td className="px-4 py-2.5 text-green-800 font-bold border-b border-green-100">{formatCurrency(p.amount)}</td>
+                          <td className="px-4 py-2.5 text-green-700 text-xs border-b border-green-100">{formatAfghanDate(p.paymentDate)}</td>
+                          <td className="px-4 py-2.5 text-green-600 text-xs border-b border-green-100">{p.notes || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             )}
 
-            {/* Images & Documents */}
+            {/* Section 8: Documents */}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="text-xs font-bold text-amber-700 uppercase tracking-wider flex items-center gap-2">
-                  <span className="w-4 h-0.5 bg-amber-400 inline-block" />
-                  {lang === 'dari' ? 'تصاویر و اسناد' : 'انځورونه او اسناد'}
-                </h4>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white"
+                    style={{ background: 'linear-gradient(135deg,#d97706,#b45309)' }}>
+                    <FileImage className="w-4 h-4" />
+                  </div>
+                  <h4 className="text-sm font-bold text-gray-800">
+                    {lang === 'dari' ? 'تصاویر و اسناد' : 'انځورونه او اسناد'}
+                  </h4>
+                </div>
                 {orderImages.length > 0 && (
                   <button
                     onClick={downloadAll}
@@ -448,31 +718,24 @@ export default function AllOrdersPage() {
               </div>
 
               {orderImages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-10 rounded-xl border-2 border-dashed border-amber-200 bg-amber-50/50">
-                  <ImageOff className="w-10 h-10 text-amber-300 mb-3" />
+                <div className="flex flex-col items-center justify-center py-8 rounded-xl border-2 border-dashed border-amber-200 bg-amber-50/50">
+                  <ImageOff className="w-8 h-8 text-amber-300 mb-2" />
                   <p className="text-sm font-semibold text-amber-500">
                     {lang === 'dari' ? 'هیچ تصویری برای این سفارش ثبت نشده است' : 'د دې سفارش لپاره هیڅ انځور نشته'}
                   </p>
-                  <p className="text-xs text-amber-400 mt-1">
-                    {lang === 'dari' ? 'تصاویر هنگام ثبت سفارش آپلود می‌شوند' : 'انځورونه د سفارش د ثبت پر مهال پورته کیږي'}
-                  </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {orderImages.map((img, idx) => (
                     <div key={idx} className="group rounded-xl overflow-hidden border-2 border-amber-100 bg-white shadow-sm hover:shadow-md transition-all">
                       <div
                         className="relative aspect-square cursor-pointer overflow-hidden bg-amber-50"
                         onClick={() => setLightboxIdx(idx)}
                       >
-                        <img
-                          src={img.url}
-                          alt={img.label}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                          loading="lazy"
-                        />
+                        <img src={img.url} alt={img.label}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
                         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-all flex items-center justify-center">
-                          <div className="w-9 h-9 rounded-full bg-white/90 shadow flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity scale-90 group-hover:scale-100 duration-200">
+                          <div className="w-9 h-9 rounded-full bg-white/90 shadow flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                             <ZoomIn className="w-4 h-4 text-amber-800" />
                           </div>
                         </div>
@@ -493,22 +756,44 @@ export default function AllOrdersPage() {
               )}
             </div>
 
+            {/* Notes */}
+            {viewOrder.notes && (
+              <div className="p-4 rounded-xl bg-amber-50 border border-amber-200">
+                <p className="text-xs font-bold text-amber-700 mb-1">{lang === 'dari' ? 'یادداشت' : 'نوټ'}</p>
+                <p className="text-sm text-amber-800">{viewOrder.notes}</p>
+              </div>
+            )}
+
             {/* Status & Actions */}
             <div className="flex items-center justify-between pt-3 border-t border-amber-200">
               <Badge variant={statusMap[viewOrder.status]?.variant} label={statusMap[viewOrder.status]?.[lang]} />
-              {viewOrder.status === 'ACTIVE' && (
-                <div className="flex gap-2">
+              {(viewOrder.status === 'ACTIVE' || viewOrder.status === 'OVERDUE') && (
+                <div className="flex gap-2 flex-wrap justify-end">
                   <button
-                    onClick={() => { setPaymentModal(viewOrder); setViewOrder(null); }}
+                    onClick={() => { setPendingReturnId(null); setPaymentModal(viewOrder); setViewOrder(null); }}
                     className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm bg-green-500 hover:bg-green-600 text-white transition-colors"
                   >
                     <CreditCard className="w-4 h-4" />{t.addPayment}
                   </button>
                   <button
-                    onClick={() => { setReturnId(viewOrder.id); setViewOrder(null); }}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm bg-blue-500 hover:bg-blue-600 text-white transition-colors"
+                    onClick={() => {
+                      const totalOwed = (viewOrder.liveFinalTotal ?? viewOrder.totalRent) - viewOrder.advancePayment;
+                      if (totalOwed > 0) {
+                        setPendingReturnId(viewOrder.id);
+                        setPaymentModal(viewOrder);
+                      } else {
+                        setReturnId(viewOrder.id);
+                      }
+                      setViewOrder(null);
+                    }}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-white transition-colors ${
+                      viewOrder.status === 'OVERDUE' ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-500 hover:bg-blue-600'
+                    }`}
                   >
-                    <CheckCircle className="w-4 h-4" />{t.markReturned}
+                    <CheckCircle className="w-4 h-4" />
+                    {viewOrder.status === 'OVERDUE'
+                      ? (lang === 'dari' ? 'برگشت موتر (ناوقت)' : 'موتر راستون (ناوخته)')
+                      : t.markReturned}
                   </button>
                 </div>
               )}
@@ -518,8 +803,23 @@ export default function AllOrdersPage() {
       )}
 
       {/* Payment Modal */}
-      <Modal open={!!paymentModal} onClose={() => setPaymentModal(null)} title={t.addPayment} size="sm">
+      <Modal
+        open={!!paymentModal}
+        onClose={() => { setPaymentModal(null); setPendingReturnId(null); }}
+        title={pendingReturnId ? (lang === 'dari' ? 'تسویه باقی و برگشت موتر' : 'پاتې تادیه او راستون') : t.addPayment}
+        size="sm"
+      >
         <div className="space-y-4">
+          {pendingReturnId && (
+            <div className="flex items-start gap-2 p-3 rounded-xl bg-orange-50 border-2 border-orange-300 text-sm">
+              <span className="text-orange-500 text-base shrink-0">⚠️</span>
+              <p className="text-orange-800 font-medium">
+                {lang === 'dari'
+                  ? 'موتر هنوز باقی پرداخت دارد. ابتدا مبلغ باقی را دریافت کنید، سپس موتر برگشت داده می‌شود.'
+                  : 'لا موتر پاتې تادیه لري. لومړی پاتې مبلغ تادیه کړئ، بیا موتر راستون کیږي.'}
+              </p>
+            </div>
+          )}
           {paymentModal && (
             <div className="p-3 bg-amber-50 rounded-lg text-sm">
               <p className="text-amber-700">
@@ -539,19 +839,6 @@ export default function AllOrdersPage() {
             />
           </div>
           <div>
-            <label className={labelCls}>{lang === 'dari' ? 'روش پرداخت' : 'د تادیي طریقه'}</label>
-            <select
-              value={paymentForm.paymentMethod}
-              onChange={e => setPaymentForm({ ...paymentForm, paymentMethod: e.target.value })}
-              className={inputCls}
-            >
-              <option value="">{lang === 'dari' ? 'انتخاب کنید' : 'غوره کړئ'}</option>
-              <option value="نقد">{lang === 'dari' ? 'نقد' : 'نقدي'}</option>
-              <option value="انتقال">{lang === 'dari' ? 'انتقال بانکی' : 'بانکي لیږد'}</option>
-              <option value="موبایل">{lang === 'dari' ? 'موبایل پیسه' : 'موبایل پیسه'}</option>
-            </select>
-          </div>
-          <div>
             <label className={labelCls}>{t.notes}</label>
             <input
               value={paymentForm.notes}
@@ -560,11 +847,11 @@ export default function AllOrdersPage() {
             />
           </div>
           <div className="flex gap-3 pt-2">
-            <button onClick={() => setPaymentModal(null)} className="flex-1 btn-secondary py-2.5 rounded-xl text-sm">
+            <button onClick={() => { setPaymentModal(null); setPendingReturnId(null); }} className="flex-1 btn-secondary py-2.5 rounded-xl text-sm">
               {t.cancel}
             </button>
             <button onClick={handlePayment} disabled={savingPayment} className="flex-1 btn-primary py-2.5 rounded-xl text-sm disabled:opacity-50">
-              {savingPayment ? t.loading : t.save}
+              {savingPayment ? t.loading : pendingReturnId ? (lang === 'dari' ? 'دریافت و برگشت' : 'تادیه او راستون') : t.save}
             </button>
           </div>
         </div>
@@ -663,16 +950,54 @@ export default function AllOrdersPage() {
         </div>
       )}
 
-      {printBill && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, overflow: 'auto', background: '#d1d5db' }}>
-          <ContractBill
-            data={printBill}
-            lang={lang as 'dari' | 'pashto'}
-            onClose={() => setPrintBill(null)}
-            autoPrint={true}
-          />
-        </div>
-      )}
     </MainLayout>
+  );
+}
+
+/* ─── Section Table Helper ─── */
+function SectionTable({
+  icon, title, color, rows,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  color: string;
+  rows: [string, any, boolean?, string?][];
+}) {
+  if (!rows.length) return null;
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-2">
+        <div
+          className="w-7 h-7 rounded-lg flex items-center justify-center text-white shrink-0"
+          style={{ background: `linear-gradient(135deg,${color},${color}cc)` }}
+        >
+          {icon}
+        </div>
+        <h4 className="text-sm font-bold text-gray-800">{title}</h4>
+      </div>
+      <div className="rounded-2xl border overflow-hidden" style={{ borderColor: `${color}40` }}>
+        <table className="w-full text-sm">
+          <tbody>
+            {rows.map(([label, value, ltr, extraCls], i) => (
+              <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/60'}>
+                <td
+                  className="px-4 py-2.5 font-semibold whitespace-nowrap border-b text-xs w-36"
+                  style={{ borderColor: `${color}25`, color: `${color}` }}
+                >
+                  {label}
+                </td>
+                <td
+                  className={`px-4 py-2.5 text-gray-800 border-b text-sm ${extraCls || 'font-medium'}`}
+                  style={{ borderColor: `${color}25` }}
+                  dir={ltr ? 'ltr' : undefined}
+                >
+                  {value || '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }

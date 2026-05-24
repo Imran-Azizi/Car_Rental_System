@@ -105,6 +105,7 @@ model Guarantor {
   phoneNumber      String
   relationship     String?
   photo            String?
+  photo2           String?
   notes            String?
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
@@ -140,6 +141,12 @@ model RentalContract {
   notes               String?
   billDocPhoto        String?
   tazkiraDocPhoto     String?
+  tazkiraDocPhoto2    String?
+  driverName          String?
+  driverLicense       String?
+  driverPhone         String?
+  overdueCharges      Float          @default(0)
+  completedAt         DateTime?
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
   car                 Car            @relation(fields: [carId], references: [id])
@@ -170,19 +177,20 @@ model Payment {
 }
 
 model Expense {
-  id          String   @id @default(cuid())
-  fromWhom    String
-  toWhom      String
-  amount      Float
-  adminShare  Float    @default(0)
-  ownerShare  Float    @default(0)
-  date        DateTime
-  description String?
-  carId       String?
-  createdBy   String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  car         Car?     @relation(fields: [carId], references: [id])
+  id           String   @id @default(cuid())
+  fromWhom     String
+  toWhom       String
+  amount       Float
+  adminShare   Float    @default(0)
+  ownerShare   Float    @default(0)
+  date         DateTime
+  description  String?
+  carId        String?
+  createdBy    String
+  receiptPhoto String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  car          Car?     @relation(fields: [carId], references: [id])
 
   @@index([date])
   @@index([carId])

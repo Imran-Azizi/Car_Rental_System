@@ -22,8 +22,12 @@ router.use(authenticate);
 
 router.get('/', getGuarantors);
 router.get('/:id', getGuarantorById);
-router.post('/', upload.single('photo'), createGuarantor);
-router.put('/:id', upload.single('photo'), updateGuarantor);
+const photoFields = upload.fields([
+  { name: 'photo',  maxCount: 1 },
+  { name: 'photo2', maxCount: 1 },
+]);
+router.post('/', photoFields, createGuarantor);
+router.put('/:id', photoFields, updateGuarantor);
 router.delete('/:id', deleteGuarantor);
 
 export default router;

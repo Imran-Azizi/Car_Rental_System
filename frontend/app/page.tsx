@@ -1,9 +1,10 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { useApp } from '@/lib/context';
 import { authAPI } from '@/lib/api';
-import { Car, Lock, Mail, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { Lock, Mail, Eye, EyeOff, AlertCircle } from 'lucide-react';
 
 export default function LoginPage() {
   const { t, setLang, lang, setToken, setUser } = useApp();
@@ -80,9 +81,16 @@ export default function LoginPage() {
           {/* Header */}
           <div className="p-8 text-center" style={{ background: 'linear-gradient(135deg, #92400e, #b45309)' }}>
             <div className="flex justify-center mb-4">
-              <div className="w-16 h-16 rounded-full flex items-center justify-center shadow-xl"
-                style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}>
-                <Car className="w-8 h-8 text-white" />
+              <div className="w-24 h-24 rounded-2xl overflow-hidden shadow-2xl flex items-center justify-center"
+                style={{ background: '#fff', padding: '6px', border: '3px solid rgba(245,158,11,0.5)' }}>
+                <Image
+                  src="/logo.png"
+                  alt="مرکز کرایه موتر افشار"
+                  width={84}
+                  height={84}
+                  className="object-contain w-full h-full"
+                  priority
+                />
               </div>
             </div>
             <h1 className="text-2xl font-bold text-white mb-1">{t.appName}</h1>

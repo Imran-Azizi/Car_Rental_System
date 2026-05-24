@@ -2,9 +2,16 @@ import prisma from '../utils/prisma.js';
 import { sendSuccess, sendError } from '../utils/response.js';
 import { generateContractNumber } from '../utils/generateContractNumber.js';
 import { deleteUploadedFiles } from '../utils/fileUtils.js';
+import { enrichWithOverdue, calcLiveOverdue, buildDeadline } from '../utils/overdueUtils.js';
 
 // Profit-sharing ratio — owner gets 50%, admin keeps 50%
 const OWNER_SHARE_PCT = parseFloat(process.env.OWNER_SHARE_PCT || '0.50');
+
+// Simple YYYY-MM-DD formatter used in notification messages
+const fmtDate = d => {
+  const dt = new Date(d);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+};
 
 function calcShares(totalRent) {
   const total = parseFloat(totalRent) || 0;
@@ -14,9 +21,8 @@ function calcShares(totalRent) {
 }
 
 /** Extract uploaded file URL or return undefined */
-function fileUrl(files, field) {
-  return files?.[field]?.[0] ? `/uploads/contracts/${files[field][0].filename}` : undefined;
-}
+const fileUrl = (files, field) =>
+  files?.[field]?.[0] ? `/uploads/contracts/${files[field][0].filename}` : undefined;
 
 export const getContracts = async (req, res) => {
   try {
@@ -34,7 +40,7 @@ export const getContracts = async (req, res) => {
       orderBy: { createdAt: 'desc' },
       include: { car: true, customer: true, guarantor: true, payments: true },
     });
-    sendSuccess(res, contracts);
+    sendSuccess(res, contracts.map(enrichWithOverdue));
   } catch (err) { sendError(res, err.message); }
 };
 
@@ -45,7 +51,7 @@ export const getContractById = async (req, res) => {
       include: { car: true, customer: true, guarantor: true, payments: { orderBy: { createdAt: 'desc' } } },
     });
     if (!contract) return sendError(res, 'قرارداد یافت نشد', 404);
-    sendSuccess(res, contract);
+    sendSuccess(res, enrichWithOverdue(contract));
   } catch (err) { sendError(res, err.message); }
 };
 
@@ -64,8 +70,9 @@ export const createContract = async (req, res) => {
     const contractNumber = generateContractNumber();
     const { ownerShare, adminShare } = calcShares(req.body.totalRent);
 
-    const billDocPhoto    = fileUrl(req.files, 'billDocPhoto');
-    const tazkiraDocPhoto = fileUrl(req.files, 'tazkiraDocPhoto');
+    const billDocPhoto     = fileUrl(req.files, 'billDocPhoto');
+    const tazkiraDocPhoto  = fileUrl(req.files, 'tazkiraDocPhoto');
+    const tazkiraDocPhoto2 = fileUrl(req.files, 'tazkiraDocPhoto2');
 
     const data = {
       carId:              req.body.carId,
@@ -85,8 +92,12 @@ export const createContract = async (req, res) => {
       contractNumber,
       ownerShare,
       adminShare,
-      ...(billDocPhoto    !== undefined && { billDocPhoto }),
-      ...(tazkiraDocPhoto !== undefined && { tazkiraDocPhoto }),
+      ...(req.body.driverName    && { driverName:    req.body.driverName }),
+      ...(req.body.driverLicense && { driverLicense: req.body.driverLicense }),
+      ...(req.body.driverPhone   && { driverPhone:   req.body.driverPhone }),
+      ...(billDocPhoto     !== undefined && { billDocPhoto }),
+      ...(tazkiraDocPhoto  !== undefined && { tazkiraDocPhoto }),
+      ...(tazkiraDocPhoto2 !== undefined && { tazkiraDocPhoto2 }),
     };
 
     const contract = await prisma.rentalContract.create({
@@ -104,12 +115,50 @@ export const createContract = async (req, res) => {
       });
     }
 
+    // Notify car owner: booking created
+    const ownerId = contract.car?.ownerId;
+    if (ownerId) {
+      prisma.ownerNotification.create({
+        data: {
+          ownerId,
+          title:   'موتر شما کرایه داده شد',
+          message: [
+            `موتر ${contract.car.carName} برای دوره زیر به کرایه داده شد:`,
+            `از تاریخ: ${fmtDate(data.startDate)}`,
+            `تا تاریخ: ${fmtDate(data.endDate)}`,
+            `شماره سفارش: ${contractNumber}`,
+            `جزئیات مالی پس از برگشت موتر نمایش داده خواهد شد.`,
+          ].join('\n'),
+          type:  'BOOKING',
+          carId: data.carId,
+        },
+      }).catch(() => {});
+    }
+
     sendSuccess(res, contract, 'سفارش موفقانه ثبت شد', 201);
   } catch (err) { sendError(res, err.message); }
 };
 
 export const updateContract = async (req, res) => {
   try {
+    /* ── 24-hour edit window guard for COMPLETED orders ── */
+    const current = await prisma.rentalContract.findUnique({
+      where:  { id: req.params.id },
+      select: { status: true, completedAt: true },
+    });
+    if (!current) return sendError(res, 'سفارش یافت نشد', 404);
+
+    if (current.status === 'COMPLETED' && current.completedAt) {
+      const elapsedHours = (Date.now() - new Date(current.completedAt).getTime()) / 3_600_000;
+      if (elapsedHours > 24) {
+        return sendError(
+          res,
+          'ویرایش سفارش‌های تکمیل‌شده فقط تا ۲۴ ساعت پس از تکمیل مجاز است.',
+          403,
+        );
+      }
+    }
+
     const updateData = { ...req.body };
 
     // Coerce string values from multipart/JSON body to the correct Prisma types
@@ -122,25 +171,40 @@ export const updateContract = async (req, res) => {
     if (updateData.startDate) updateData.startDate = new Date(updateData.startDate);
     if (updateData.endDate)   updateData.endDate   = new Date(updateData.endDate);
 
-    // Recalculate shares if totalRent changed
+    // Recalculate shares AND remaining when totalRent changes
     if (updateData.totalRent !== undefined) {
-      const { ownerShare, adminShare } = calcShares(updateData.totalRent);
+      const newTotal = parseFloat(String(updateData.totalRent)) || 0;
+
+      if (newTotal < 0) return sendError(res, 'مجموع کرایه نمی‌تواند منفی باشد', 400);
+
+      const { ownerShare, adminShare } = calcShares(newTotal);
       updateData.ownerShare = ownerShare;
       updateData.adminShare = adminShare;
+
+      // Recalculate remaining = newTotal - sum(all payments for this contract)
+      const paidAgg = await prisma.payment.aggregate({
+        _sum: { amount: true },
+        where: { contractId: req.params.id },
+      });
+      const totalPaid = paidAgg._sum.amount || 0;
+      updateData.remainingAmount = Math.max(0, newTotal - totalPaid);
     }
 
     // Handle uploaded photos
-    const billDocPhoto    = fileUrl(req.files, 'billDocPhoto');
-    const tazkiraDocPhoto = fileUrl(req.files, 'tazkiraDocPhoto');
-    if (billDocPhoto)    updateData.billDocPhoto    = billDocPhoto;
-    if (tazkiraDocPhoto) updateData.tazkiraDocPhoto = tazkiraDocPhoto;
+    const billDocPhoto     = fileUrl(req.files, 'billDocPhoto');
+    const tazkiraDocPhoto  = fileUrl(req.files, 'tazkiraDocPhoto');
+    const tazkiraDocPhoto2 = fileUrl(req.files, 'tazkiraDocPhoto2');
+    if (billDocPhoto)     updateData.billDocPhoto     = billDocPhoto;
+    if (tazkiraDocPhoto)  updateData.tazkiraDocPhoto  = tazkiraDocPhoto;
+    if (tazkiraDocPhoto2) updateData.tazkiraDocPhoto2 = tazkiraDocPhoto2;
 
     // Fetch existing contract once for car-swap and advance recalc
+    // (reuse 'current' from the guard above for carId + totalRent)
     const existing = await prisma.rentalContract.findUnique({
       where: { id: req.params.id },
       select: { carId: true, totalRent: true },
     });
-    if (!existing) return sendError(res, 'سفارش یافت نشد', 404);
+    if (!existing) return sendError(res, 'سفارش یافت نشد', 404); // safety fallback
 
     // Swap car status when carId changes
     if (updateData.carId && updateData.carId !== existing.carId) {
@@ -165,12 +229,42 @@ export const updateContract = async (req, res) => {
 
 export const markAsReturned = async (req, res) => {
   try {
+    // Freeze the live overdue charges before completing the contract
+    const existing = await prisma.rentalContract.findUnique({
+      where: { id: req.params.id },
+      select: { endDate: true, endTime: true, rentPrice: true },
+    });
+    const { overdueCharges: frozenCharges } = existing
+      ? calcLiveOverdue(existing.endDate, existing.endTime, existing.rentPrice)
+      : { overdueCharges: 0 };
+
     const contract = await prisma.rentalContract.update({
       where: { id: req.params.id },
-      data: { status: 'COMPLETED' },
+      data: { status: 'COMPLETED', overdueCharges: frozenCharges, completedAt: new Date() },
       include: { car: true },
     });
     await prisma.car.update({ where: { id: contract.carId }, data: { status: 'AVAILABLE' } });
+
+    // Notify car owner: car returned, full details now visible
+    const ownerId = contract.car?.ownerId;
+    if (ownerId) {
+      prisma.ownerNotification.create({
+        data: {
+          ownerId,
+          title:   'موتر برگشت داده شد — اطلاعات کامل قابل مشاهده',
+          message: [
+            `موتر ${contract.car.carName} برگشت داده شد.`,
+            `شماره قرارداد: ${contract.contractNumber}`,
+            `سهم شما از این قرارداد: ${contract.ownerShare || 0} افغانی`,
+            `اکنون می‌توانید تمام جزئیات مالی و اطلاعات قرارداد را در پنل خود مشاهده کنید.`,
+          ].join('\n'),
+          type:   'RETURN',
+          carId:  contract.carId,
+          amount: contract.ownerShare || 0,
+        },
+      }).catch(() => {});
+    }
+
     sendSuccess(res, contract, 'موتر موفقانه برگشت داده شد');
   } catch (err) { sendError(res, err.message); }
 };
@@ -186,13 +280,15 @@ export const addPayment = async (req, res) => {
       prisma.payment.aggregate({ _sum: { amount: true }, where: { contractId: id } }),
       prisma.rentalContract.findUnique({ where: { id }, select: { totalRent: true } }),
     ]);
-    const totalPaid = totalPaidResult._sum.amount || 0;
-    const remaining = (contract?.totalRent || 0) - totalPaid;
+    const totalPaid     = totalPaidResult._sum.amount || 0;
+    const remaining     = Math.max(0, (contract?.totalRent || 0) - totalPaid);
     await prisma.rentalContract.update({
       where: { id },
-      data: { remainingAmount: Math.max(0, remaining) },
+      data: { remainingAmount: remaining },
     });
-    sendSuccess(res, payment, 'پرداخت موفقانه ثبت شد', 201);
+    /* Return the new remainingAmount so the frontend can decide
+       whether to automatically mark the order as returned. */
+    sendSuccess(res, { payment, remainingAmount: remaining }, 'پرداخت موفقانه ثبت شد', 201);
   } catch (err) { sendError(res, err.message); }
 };
 
@@ -222,4 +318,45 @@ export const deleteContract = async (req, res) => {
 
     sendSuccess(res, null, 'سفارش موفقانه حذف شد');
   } catch (err) { sendError(res, err.message); }
+};
+
+/**
+ * Auto-mark ACTIVE contracts as OVERDUE when their deadline has passed.
+ * Called by the background job in server.js every 30 minutes.
+ * Returns the number of contracts marked.
+ */
+export const autoMarkOverdue = async () => {
+  try {
+    // Fetch all ACTIVE contracts past their endDate
+    const candidates = await prisma.rentalContract.findMany({
+      where: {
+        status: 'ACTIVE',
+        endDate: { lt: new Date() }, // endDate is before now
+      },
+      select: { id: true, endDate: true, endTime: true, rentPrice: true },
+    });
+
+    const toMark = candidates.filter(c => {
+      const deadline = buildDeadline(c.endDate, c.endTime);
+      return new Date() > deadline;
+    });
+
+    if (toMark.length === 0) return 0;
+
+    await prisma.rentalContract.updateMany({
+      where: { id: { in: toMark.map(c => c.id) } },
+      data: { status: 'OVERDUE' },
+    });
+
+    return toMark.length;
+  } catch (err) {
+    console.error('[autoMarkOverdue] error:', err.message);
+    return 0;
+  }
+};
+
+/** Route handler wrapper for manual trigger or health checks */
+export const triggerOverdueCheck = async (req, res) => {
+  const count = await autoMarkOverdue();
+  sendSuccess(res, { marked: count }, `${count} سفارش به ناوقت تبدیل شد`);
 };

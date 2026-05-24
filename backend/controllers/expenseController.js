@@ -187,6 +187,8 @@ export const createExpense = async (req, res) => {
 
     const createdBy = req.user?.name || req.user?.email || 'مدیر سیستم';
 
+    const receiptPhoto = req.file ? `/uploads/expenses/${req.file.filename}` : null;
+
     const expense = await prisma.expense.create({
       data: {
         fromWhom: fromWhom.trim(),
@@ -198,6 +200,7 @@ export const createExpense = async (req, res) => {
         description: description?.trim() || null,
         carId: carId || null,
         createdBy,
+        ...(receiptPhoto && { receiptPhoto }),
       },
       include: {
         car: {
@@ -257,6 +260,8 @@ export const updateExpense = async (req, res) => {
 
     const { adminShare, ownerShare } = carId ? calcSplit(parsedAmount) : { adminShare: parsedAmount, ownerShare: 0 };
 
+    const receiptPhoto = req.file ? `/uploads/expenses/${req.file.filename}` : undefined;
+
     const expense = await prisma.expense.update({
       where: { id: req.params.id },
       data: {
@@ -268,6 +273,7 @@ export const updateExpense = async (req, res) => {
         date: new Date(date),
         description: description?.trim() || null,
         carId: carId || null,
+        ...(receiptPhoto !== undefined && { receiptPhoto }),
       },
       include: {
         car: {

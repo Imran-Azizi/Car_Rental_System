@@ -2,9 +2,9 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ownerPortalAPI } from '@/lib/api';
-import { Car, Search, Filter, Image as ImageIcon } from 'lucide-react';
+import { Car, Search, Filter, Image as ImageIcon, CalendarClock } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, formatAfghanDate } from '@/lib/utils';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:5000';
 
@@ -136,9 +136,14 @@ export default function OwnerCarsPage() {
                   </div>
 
                   {activeContract && (
-                    <div className="p-2.5 rounded-xl text-xs" style={{ background: '#dbeafe', color: '#1e40af' }}>
-                      <p className="font-medium">در حال کرایه توسط:</p>
-                      <p>{activeContract.customer?.fullName}</p>
+                    <div className="p-2.5 rounded-xl text-xs" style={{ background: '#dbeafe', color: '#1e40af', border: '1px solid #bfdbfe' }}>
+                      <div className="flex items-center gap-1.5 font-semibold mb-1">
+                        <CalendarClock className="w-3.5 h-3.5 shrink-0" />
+                        دوره کرایه:
+                      </div>
+                      <p className="font-medium" dir="ltr" style={{ textAlign: 'right' }}>
+                        {formatAfghanDate(activeContract.startDate)} — {formatAfghanDate(activeContract.endDate)}
+                      </p>
                     </div>
                   )}
 
