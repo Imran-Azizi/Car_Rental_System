@@ -3,6 +3,7 @@ import { sendSuccess, sendError } from '../utils/response.js';
 import { generateContractNumber } from '../utils/generateContractNumber.js';
 import { deleteUploadedFiles } from '../utils/fileUtils.js';
 import { enrichWithOverdue, calcLiveOverdue, buildDeadline } from '../utils/overdueUtils.js';
+import { getFieldUrl } from '../utils/storage.js';
 
 // Profit-sharing ratio — owner gets 50%, admin keeps 50%
 const OWNER_SHARE_PCT = parseFloat(process.env.OWNER_SHARE_PCT || '0.50');
@@ -20,9 +21,8 @@ function calcShares(totalRent) {
   return { ownerShare, adminShare };
 }
 
-/** Extract uploaded file URL or return undefined */
-const fileUrl = (files, field) =>
-  files?.[field]?.[0] ? `/uploads/contracts/${files[field][0].filename}` : undefined;
+/** Extract uploaded file URL or return undefined (works for local disk and Cloudinary) */
+const fileUrl = (files, field) => getFieldUrl(files, field, 'contracts');
 
 export const getContracts = async (req, res) => {
   try {

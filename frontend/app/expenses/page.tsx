@@ -8,6 +8,7 @@ import StatCard from '@/components/ui/StatCard';
 import { useApp } from '@/lib/context';
 import { expensesAPI, carsAPI } from '@/lib/api';
 import { formatAfghanDate, formatNumber, numericInputHandler } from '@/lib/utils';
+import { resolveImgUrl } from '@/lib/imageUrl';
 import {
   Plus, Search, Edit, Trash2, Wallet, Calendar,
   Printer, ChevronLeft, ChevronRight, SlidersHorizontal,
@@ -96,8 +97,7 @@ export default function ExpensesPage() {
   const { t, token, user, lang } = useApp();
   const router = useRouter();
 
-  const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api').replace('/api', '');
-  const imgUrl = (p?: string | null) => (p ? `${API_BASE}${p}` : null);
+  const imgUrl = resolveImgUrl;
 
   // Data
   const [expenses, setExpenses]   = useState<Expense[]>([]);

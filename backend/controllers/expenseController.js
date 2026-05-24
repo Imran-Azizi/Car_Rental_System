@@ -1,5 +1,6 @@
 import prisma from '../utils/prisma.js';
 import { sendSuccess, sendError } from '../utils/response.js';
+import { getFileUrl } from '../utils/storage.js';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -187,7 +188,7 @@ export const createExpense = async (req, res) => {
 
     const createdBy = req.user?.name || req.user?.email || 'مدیر سیستم';
 
-    const receiptPhoto = req.file ? `/uploads/expenses/${req.file.filename}` : null;
+    const receiptPhoto = getFileUrl(req.file, 'expenses') ?? null;
 
     const expense = await prisma.expense.create({
       data: {
@@ -260,7 +261,7 @@ export const updateExpense = async (req, res) => {
 
     const { adminShare, ownerShare } = carId ? calcSplit(parsedAmount) : { adminShare: parsedAmount, ownerShare: 0 };
 
-    const receiptPhoto = req.file ? `/uploads/expenses/${req.file.filename}` : undefined;
+    const receiptPhoto = getFileUrl(req.file, 'expenses');
 
     const expense = await prisma.expense.update({
       where: { id: req.params.id },

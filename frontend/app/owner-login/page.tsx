@@ -5,8 +5,6 @@ import Image from 'next/image';
 import { ownerAuthAPI } from '@/lib/api';
 import { Eye, EyeOff, Phone, Lock, AlertCircle } from 'lucide-react';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:5000';
-
 export default function OwnerLoginPage() {
   const router = useRouter();
   const [phoneNumber, setPhoneNumber] = useState('');

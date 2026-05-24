@@ -8,8 +8,7 @@ import { useApp } from '@/lib/context';
 import { carOwnersAPI } from '@/lib/api';
 import { Plus, Search, Edit, Trash2, UserCheck, Camera, X, Car, Eye, EyeOff, KeyRound, Mail } from 'lucide-react';
 import toast from 'react-hot-toast';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:5000';
+import { resolveImgUrl } from '@/lib/imageUrl';
 
 const emptyForm = { fullName: '', fatherName: '', tazkiraNumber: '', phoneNumber: '', address: '', email: '', password: '' };
 
@@ -57,7 +56,7 @@ export default function CarOwnersPage() {
     setEditOwner(owner);
     setForm({ fullName: owner.fullName, fatherName: owner.fatherName, tazkiraNumber: owner.tazkiraNumber || '', phoneNumber: owner.phoneNumber, address: owner.address || '', email: owner.email || '', password: '' });
     setPhotoFile(null);
-    setPhotoPreview(owner.photo ? `${API_URL}${owner.photo}` : null);
+    setPhotoPreview(owner.photo ? resolveImgUrl(owner.photo)! : null);
     setErrors({});
     setShowPassword(false);
     setModalOpen(true);
@@ -175,7 +174,7 @@ export default function CarOwnersPage() {
                     <td className="px-4 py-3 text-sm text-amber-600">{i + 1}</td>
                     <td className="px-4 py-3">
                       {owner.photo ? (
-                        <img src={`${API_URL}${owner.photo}`} alt={owner.fullName} className="w-10 h-10 rounded-full object-cover border-2 border-amber-200" />
+                        <img src={resolveImgUrl(owner.photo)!} alt={owner.fullName} className="w-10 h-10 rounded-full object-cover border-2 border-amber-200" />
                       ) : (
                         <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ background: 'linear-gradient(135deg,#f59e0b,#d97706)' }}>
                           <UserCheck className="w-5 h-5 text-white" />
@@ -227,7 +226,7 @@ export default function CarOwnersPage() {
                 </div>
               )}
               {photoPreview && (
-                <button onClick={() => { setPhotoFile(null); setPhotoPreview(editOwner?.photo ? `${API_URL}${editOwner.photo}` : null); if (fileRef.current) fileRef.current.value = ''; }}
+                <button onClick={() => { setPhotoFile(null); setPhotoPreview(resolveImgUrl(editOwner?.photo)); if (fileRef.current) fileRef.current.value = ''; }}
                   className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center">
                   <X className="w-3 h-3" />
                 </button>

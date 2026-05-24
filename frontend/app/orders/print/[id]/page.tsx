@@ -5,8 +5,7 @@ import ContractBill, { BillData } from '@/components/ContractBill';
 import CustomerBill, { CustomerBillData } from '@/components/CustomerBill';
 import { ordersAPI } from '@/lib/api';
 import { Printer, User, ShieldCheck, ArrowRight, FileX, Loader2 } from 'lucide-react';
-
-const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api').replace('/api', '');
+import { resolveImgUrl } from '@/lib/imageUrl';
 
 type Mode = 'choose' | 'admin' | 'customer';
 
@@ -50,9 +49,7 @@ export default function OrderPrintByIdPage() {
           customerCurrentAddress:  c.customer?.currentAddress,
           customerTazkira:         c.customer?.tazkiraNumber,
           customerPhone:           c.customer?.phoneNumber,
-          customerPhoto:           c.customer?.photo
-                                     ? `${API_BASE}${c.customer.photo}`
-                                     : undefined,
+          customerPhoto:           resolveImgUrl(c.customer?.photo) ?? undefined,
           guarantorFullName:       c.guarantor?.fullName,
           guarantorFatherName:     c.guarantor?.fatherName,
           guarantorDistrict:       c.guarantor?.district,

@@ -1,8 +1,8 @@
 import bcrypt from 'bcryptjs';
 import prisma from '../utils/prisma.js';
 import { sendSuccess, sendError } from '../utils/response.js';
-import fs from 'fs';
-import path from 'path';
+import { deleteUploadedFile } from '../utils/fileUtils.js';
+import { getFileUrl, cleanupFile } from '../utils/storage.js';
 
 const sanitize = (owner) => {
   if (!owner) return owner;
@@ -17,10 +17,10 @@ export const getCarOwners = async (req, res) => {
     const { search } = req.query;
     const where = {};
     if (search) where.OR = [
-      { fullName: { contains: search, mode: 'insensitive' } },
-      { phoneNumber: { contains: search, mode: 'insensitive' } },
+      { fullName:      { contains: search, mode: 'insensitive' } },
+      { phoneNumber:   { contains: search, mode: 'insensitive' } },
       { tazkiraNumber: { contains: search, mode: 'insensitive' } },
-      { email: { contains: search, mode: 'insensitive' } },
+      { email:         { contains: search, mode: 'insensitive' } },
     ];
     const owners = await prisma.carOwner.findMany({
       where,
@@ -47,29 +47,29 @@ export const createCarOwner = async (req, res) => {
     const { fullName, fatherName, tazkiraNumber, phoneNumber, address, email, password } = req.body;
 
     if (!fullName || !fatherName || !phoneNumber) {
-      if (req.file) fs.unlinkSync(req.file.path);
+      cleanupFile(req.file);
       return sendError(res, 'فیلدهای الزامی را پر کنید', 400);
     }
 
     if (email && !isValidEmail(email)) {
-      if (req.file) fs.unlinkSync(req.file.path);
+      cleanupFile(req.file);
       return sendError(res, 'فرمت ایمیل صحیح نیست', 400);
     }
 
     if (email) {
       const existing = await prisma.carOwner.findFirst({ where: { email } });
       if (existing) {
-        if (req.file) fs.unlinkSync(req.file.path);
+        cleanupFile(req.file);
         return sendError(res, 'این ایمیل قبلاً ثبت شده است', 400);
       }
     }
 
     if (password && password.length < 6) {
-      if (req.file) fs.unlinkSync(req.file.path);
+      cleanupFile(req.file);
       return sendError(res, 'رمز عبور باید حداقل ۶ کاراکتر باشد', 400);
     }
 
-    const photo = req.file ? `/uploads/owners/${req.file.filename}` : null;
+    const photo = getFileUrl(req.file, 'owners') ?? null;
     const hashedPassword = password ? await bcrypt.hash(password, 12) : null;
 
     const owner = await prisma.carOwner.create({
@@ -77,8 +77,8 @@ export const createCarOwner = async (req, res) => {
         fullName, fatherName,
         tazkiraNumber: tazkiraNumber || null,
         photo, phoneNumber,
-        address: address || null,
-        email: email || null,
+        address:  address  || null,
+        email:    email    || null,
         password: hashedPassword,
       },
     });
@@ -97,30 +97,27 @@ export const updateCarOwner = async (req, res) => {
     const { fullName, fatherName, tazkiraNumber, phoneNumber, address, email, password } = req.body;
 
     if (email && !isValidEmail(email)) {
-      if (req.file) fs.unlinkSync(req.file.path);
+      cleanupFile(req.file);
       return sendError(res, 'فرمت ایمیل صحیح نیست', 400);
     }
 
     if (email && email !== existing.email) {
       const duplicate = await prisma.carOwner.findFirst({ where: { email, NOT: { id: req.params.id } } });
       if (duplicate) {
-        if (req.file) fs.unlinkSync(req.file.path);
+        cleanupFile(req.file);
         return sendError(res, 'این ایمیل قبلاً ثبت شده است', 400);
       }
     }
 
     if (password && password.length < 6) {
-      if (req.file) fs.unlinkSync(req.file.path);
+      cleanupFile(req.file);
       return sendError(res, 'رمز عبور باید حداقل ۶ کاراکتر باشد', 400);
     }
 
     let photo = existing.photo;
     if (req.file) {
-      if (existing.photo) {
-        const oldPath = path.join(process.cwd(), 'uploads', 'owners', path.basename(existing.photo));
-        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-      }
-      photo = `/uploads/owners/${req.file.filename}`;
+      if (existing.photo) deleteUploadedFile(existing.photo);
+      photo = getFileUrl(req.file, 'owners');
     }
 
     const updateData = {
@@ -128,7 +125,7 @@ export const updateCarOwner = async (req, res) => {
       tazkiraNumber: tazkiraNumber || null,
       photo, phoneNumber,
       address: address || null,
-      email: email || null,
+      email:   email   || null,
     };
 
     if (password && password.trim()) {
@@ -151,10 +148,7 @@ export const deleteCarOwner = async (req, res) => {
     const existing = await prisma.carOwner.findUnique({ where: { id: req.params.id } });
     if (!existing) return sendError(res, 'صاحب موتر یافت نشد', 404);
 
-    if (existing.photo) {
-      const oldPath = path.join(process.cwd(), 'uploads', 'owners', path.basename(existing.photo));
-      if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-    }
+    if (existing.photo) deleteUploadedFile(existing.photo);
 
     await prisma.carOwner.delete({ where: { id: req.params.id } });
     sendSuccess(res, null, 'صاحب موتر موفقانه حذف شد');

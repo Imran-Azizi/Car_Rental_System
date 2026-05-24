@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import ContractBill, { BillData } from '@/components/ContractBill';
 import CustomerBill, { CustomerBillData } from '@/components/CustomerBill';
+import { resolveImgUrl } from '@/lib/imageUrl';
 import toast from 'react-hot-toast';
 
 /* ─── types ─── */
@@ -402,7 +403,6 @@ export default function OrderNewPage() {
     if (!id) return;
     setIsEditMode(true);
     setEditId(id);
-    const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api').replace('/api', '');
     ordersAPI.getById(id).then(res => {
       const c = res.data.data;
       skipNextDailyRateSync.current = true;
@@ -444,13 +444,12 @@ export default function OrderNewPage() {
       setDriverPhone(c.driverPhone || '');
       setDailyRentInput(String(c.rentPrice   || ''));
       setReceivedAmount(String(c.advancePayment || ''));
-      const imgUrl = (p: string | null) => p ? `${API_BASE}${p}` : null;
-      const cp  = imgUrl(c.customer?.photo);     if (cp)  setCustomerPhotoPreview(cp);
-      const gp  = imgUrl(c.guarantor?.photo);    if (gp)  setGuarantorPhotoPreview(gp);
-      const gp2 = imgUrl(c.guarantor?.photo2);   if (gp2) setGuarantorPhoto2Preview(gp2);
-      const bp  = imgUrl(c.billDocPhoto);        if (bp)  setBillDocPhotoPreview(bp);
-      const tp  = imgUrl(c.tazkiraDocPhoto);     if (tp)  setTazkiraDocPhotoPreview(tp);
-      const tp2 = imgUrl(c.tazkiraDocPhoto2);    if (tp2) setTazkiraDocPhoto2Preview(tp2);
+      const cp  = resolveImgUrl(c.customer?.photo);     if (cp)  setCustomerPhotoPreview(cp);
+      const gp  = resolveImgUrl(c.guarantor?.photo);    if (gp)  setGuarantorPhotoPreview(gp);
+      const gp2 = resolveImgUrl(c.guarantor?.photo2);   if (gp2) setGuarantorPhoto2Preview(gp2);
+      const bp  = resolveImgUrl(c.billDocPhoto);        if (bp)  setBillDocPhotoPreview(bp);
+      const tp  = resolveImgUrl(c.tazkiraDocPhoto);     if (tp)  setTazkiraDocPhotoPreview(tp);
+      const tp2 = resolveImgUrl(c.tazkiraDocPhoto2);    if (tp2) setTazkiraDocPhoto2Preview(tp2);
     }).catch(() => toast.error(lang === 'dari' ? 'خطا در بارگذاری سفارش' : 'د سفارش بارولو کې تیروتنه'));
   }, [token]);
 

@@ -11,6 +11,7 @@ import { Plus, Search, Eye, Trash2, CheckCircle, CreditCard, Printer, Pencil, Do
 import toast from 'react-hot-toast';
 import Link from 'next/link';
 import { formatAfghanDate, formatCurrency as fmtCur, numericInputProps, numericInputHandler, formatNumber } from '@/lib/utils';
+import { resolveImgUrl } from '@/lib/imageUrl';
 
 const STATUS_LIST = ['ACTIVE', 'COMPLETED', 'CANCELLED', 'OVERDUE'] as const;
 const statusMap: any = {
@@ -58,8 +59,7 @@ export default function AllOrdersPage() {
   const [savingTotalRent, setSavingTotalRent] = useState(false);
   const [totalRentError,  setTotalRentError]  = useState('');
 
-  const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api').replace('/api', '');
-  const imgUrl = (p: string | null | undefined) => (p ? `${API_BASE}${p}` : null);
+  const imgUrl = resolveImgUrl;
 
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [debouncedSearch, setDebouncedSearch] = useState('');

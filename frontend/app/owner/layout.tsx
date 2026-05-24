@@ -8,8 +8,7 @@ import {
   Menu, X, ChevronLeft, Bell, Phone, UserCheck,
 } from 'lucide-react';
 import { ownerAuthAPI, ownerPortalAPI } from '@/lib/api';
-
-const API_URL   = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:5000';
+import { resolveImgUrl } from '@/lib/imageUrl';
 const SIDEBAR_W = 'w-72';   /* 288 px — must match admin */
 const BG        = 'linear-gradient(175deg,#111827 0%,#1e2d45 55%,#0f3460 100%)';
 
@@ -252,7 +251,7 @@ export default function OwnerLayout({ children }: { children: React.ReactNode })
 
   if (!mounted) return null;
 
-  const photoUrl = owner?.photo ? `${API_URL}${owner.photo}` : null;
+  const photoUrl = resolveImgUrl(owner?.photo);
   const label    = (d: string, p: string) => lang === 'dari' ? d : p;
 
   /* shared sidebar props */

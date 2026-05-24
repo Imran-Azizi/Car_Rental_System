@@ -5,8 +5,7 @@ import { ownerPortalAPI } from '@/lib/api';
 import { Car, Search, Filter, Image as ImageIcon, CalendarClock } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { formatCurrency, formatAfghanDate } from '@/lib/utils';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:5000';
+import { resolveImgUrl } from '@/lib/imageUrl';
 
 const statusConfig: Record<string, { label: string; color: string; bg: string; dot: string }> = {
   AVAILABLE: { label: 'آزاد', color: '#16a34a', bg: '#dcfce7', dot: '#10b981' },
@@ -103,7 +102,7 @@ export default function OwnerCarsPage() {
                 <div className="h-40 relative overflow-hidden"
                   style={{ background: 'linear-gradient(135deg, #fef3c7, #fde68a)' }}>
                   {thumb ? (
-                    <img src={`${API_URL}${thumb}`} alt={car.carName} className="w-full h-full object-cover" />
+                    <img src={resolveImgUrl(thumb)!} alt={car.carName} className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex flex-col items-center justify-center gap-2">
                       <ImageIcon className="w-10 h-10 text-amber-300" />

@@ -1,28 +1,36 @@
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+/**
+ * File-deletion utility — Cloudinary only.
+ *
+ * Handles two URL shapes:
+ *   • Cloudinary  https://res.cloudinary.com/…/upload/v123/afshar-car-rental/customers/file.jpg
+ *   • Legacy      /uploads/customers/file.jpg  (old records before Cloudinary migration)
+ *
+ * Legacy local paths are silently ignored — the files no longer exist on disk
+ * (Railway containers are ephemeral), so there is nothing to delete.
+ */
+import { v2 as cloudinary } from 'cloudinary';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname  = path.dirname(__filename);
-const UPLOADS_ROOT = path.resolve(__dirname, '..', 'uploads');
+cloudinary.config({ secure: true }); // auto-reads CLOUDINARY_URL
 
 /**
- * Safely delete a file whose path is stored as "/uploads/subfolder/filename".
- * - Resolves the full path, guards against path traversal, then unlinks.
- * - Silent on missing files so callers don't need try/catch.
+ * Delete a stored asset URL from Cloudinary.
+ * Non-Cloudinary URLs (legacy local paths) are silently skipped.
+ * Safe to fire-and-forget — returns a Promise that never rejects.
  */
-export function deleteUploadedFile(storedPath) {
-  if (!storedPath) return;
+export async function deleteUploadedFile(storedUrl) {
+  if (!storedUrl) return;
+
+  // Only act on real Cloudinary URLs
+  if (!storedUrl.startsWith('https://res.cloudinary.com')) return;
+
   try {
-    const relative = storedPath.replace(/^\/+uploads\/+/, '');
-    const full = path.resolve(UPLOADS_ROOT, relative);
-    // Path-traversal guard: must remain inside the uploads folder
-    if (!full.startsWith(UPLOADS_ROOT + path.sep) && full !== UPLOADS_ROOT) return;
-    if (fs.existsSync(full)) fs.unlinkSync(full);
-  } catch { /* already gone or unreadable — don't crash */ }
+    // URL shape: .../upload/v<ver>/<public_id>.<ext>  OR  .../upload/<public_id>.<ext>
+    const match = storedUrl.match(/\/upload\/(?:v\d+\/)?(.+?)\.\w+$/);
+    if (match) await cloudinary.uploader.destroy(match[1]);
+  } catch { /* already deleted or unreachable — ignore */ }
 }
 
-/** Delete multiple files in one call */
-export function deleteUploadedFiles(...paths) {
-  paths.forEach(deleteUploadedFile);
+/** Delete multiple stored URLs in parallel. */
+export async function deleteUploadedFiles(...urls) {
+  await Promise.all(urls.map(deleteUploadedFile));
 }

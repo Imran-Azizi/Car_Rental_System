@@ -1,6 +1,7 @@
 import prisma from '../utils/prisma.js';
 import { sendSuccess, sendError } from '../utils/response.js';
 import { deleteUploadedFile } from '../utils/fileUtils.js';
+import { getFileUrl } from '../utils/storage.js';
 
 const pick = (body, photoUrl) => {
   const { fullName, fatherName, grandfatherName, tazkiraNumber, province, district, village, currentAddress, permanentAddress, phoneNumber, occupation, notes } = body;
@@ -13,8 +14,8 @@ export const getCustomers = async (req, res) => {
   try {
     const { search } = req.query;
     const where = search ? { OR: [
-      { fullName: { contains: search, mode: 'insensitive' } },
-      { phoneNumber: { contains: search } },
+      { fullName:      { contains: search, mode: 'insensitive' } },
+      { phoneNumber:   { contains: search } },
       { tazkiraNumber: { contains: search } },
     ]} : {};
     const customers = await prisma.customer.findMany({ where, orderBy: { createdAt: 'desc' }, include: { _count: { select: { rentalContracts: true } } } });
@@ -32,7 +33,7 @@ export const getCustomerById = async (req, res) => {
 
 export const createCustomer = async (req, res) => {
   try {
-    const photoUrl = req.file ? `/uploads/customers/${req.file.filename}` : undefined;
+    const photoUrl = getFileUrl(req.file, 'customers');
     const customer = await prisma.customer.create({ data: pick(req.body, photoUrl) });
     sendSuccess(res, customer, 'مشتری موفقانه اضافه شد', 201);
   } catch (err) { sendError(res, err.message); }
@@ -42,10 +43,9 @@ export const updateCustomer = async (req, res) => {
   try {
     let photoUrl;
     if (req.file) {
-      // Delete the old photo if a new one is being uploaded
       const existing = await prisma.customer.findUnique({ where: { id: req.params.id }, select: { photo: true } });
       if (existing?.photo) deleteUploadedFile(existing.photo);
-      photoUrl = `/uploads/customers/${req.file.filename}`;
+      photoUrl = getFileUrl(req.file, 'customers');
     }
     const customer = await prisma.customer.update({ where: { id: req.params.id }, data: pick(req.body, photoUrl) });
     sendSuccess(res, customer, 'مشتری موفقانه بروز شد');

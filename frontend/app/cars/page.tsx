@@ -11,10 +11,9 @@ import { carsAPI, carOwnersAPI } from '@/lib/api';
 import { Plus, Search, Edit, Trash2, UserCheck, Camera, X, ChevronLeft, ChevronRight, Images } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { parseNum } from '@/lib/utils';
+import { resolveImgUrl } from '@/lib/imageUrl';
 
 const Select = dynamic(() => import('react-select'), { ssr: false });
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:5000';
 const CAR_STATUS = ['AVAILABLE','RENTED','MAINTENANCE','INACTIVE'] as const;
 
 const statusMap: any = {
@@ -55,7 +54,7 @@ function CarThumbnail({ images }: { images: any[] }) {
   if (!images?.length) return <div className="w-14 h-10 rounded-lg bg-amber-100 flex items-center justify-center text-amber-400 text-lg">🚗</div>;
   return (
     <img
-      src={`${API_URL}${images[0].url}`}
+      src={resolveImgUrl(images[0].url)!}
       alt="car"
       className="w-14 h-10 rounded-lg object-cover border border-amber-200"
     />
@@ -101,7 +100,7 @@ function ImageGallery({ carId, images, onChanged }: { carId: string; images: any
       {images.length > 0 ? (
         <div className="relative rounded-xl overflow-hidden bg-amber-50 border border-amber-200" style={{ height: '220px' }}>
           <img
-            src={`${API_URL}${images[activeIdx]?.url}`}
+            src={resolveImgUrl(images[activeIdx]?.url)!}
             alt="car"
             className="w-full h-full object-contain"
           />
@@ -142,7 +141,7 @@ function ImageGallery({ carId, images, onChanged }: { carId: string; images: any
           {images.map((img, i) => (
             <button key={img.id} onClick={() => setActiveIdx(i)}
               className={`shrink-0 w-14 h-10 rounded-lg overflow-hidden border-2 transition-all ${i === activeIdx ? 'border-amber-500' : 'border-transparent'}`}>
-              <img src={`${API_URL}${img.url}`} alt="" className="w-full h-full object-cover" />
+              <img src={resolveImgUrl(img.url)!} alt="" className="w-full h-full object-cover" />
             </button>
           ))}
         </div>

@@ -1,6 +1,7 @@
 import prisma from '../utils/prisma.js';
 import { sendSuccess, sendError } from '../utils/response.js';
 import { deleteUploadedFile } from '../utils/fileUtils.js';
+import { getFieldUrl } from '../utils/storage.js';
 
 const pick = (body, photoUrl, photo2Url) => {
   const { fullName, fatherName, grandfatherName, tazkiraNumber, province, district, village, currentAddress, permanentAddress, phoneNumber, relationship, notes } = body;
@@ -14,7 +15,7 @@ export const getGuarantors = async (req, res) => {
   try {
     const { search } = req.query;
     const where = search ? { OR: [
-      { fullName: { contains: search, mode: 'insensitive' } },
+      { fullName:    { contains: search, mode: 'insensitive' } },
       { phoneNumber: { contains: search } },
     ]} : {};
     const guarantors = await prisma.guarantor.findMany({ where, orderBy: { createdAt: 'desc' }, include: { _count: { select: { rentalContracts: true } } } });
@@ -30,13 +31,10 @@ export const getGuarantorById = async (req, res) => {
   } catch (err) { sendError(res, err.message); }
 };
 
-const fileFromFields = (files, field) =>
-  files?.[field]?.[0] ? `/uploads/guarantors/${files[field][0].filename}` : undefined;
-
 export const createGuarantor = async (req, res) => {
   try {
-    const photoUrl  = fileFromFields(req.files, 'photo');
-    const photo2Url = fileFromFields(req.files, 'photo2');
+    const photoUrl  = getFieldUrl(req.files, 'photo',  'guarantors');
+    const photo2Url = getFieldUrl(req.files, 'photo2', 'guarantors');
     const guarantor = await prisma.guarantor.create({ data: pick(req.body, photoUrl, photo2Url) });
     sendSuccess(res, guarantor, 'ضامن موفقانه اضافه شد', 201);
   } catch (err) { sendError(res, err.message); }
@@ -48,12 +46,12 @@ export const updateGuarantor = async (req, res) => {
     if (req.files?.photo?.[0]) {
       const existing = await prisma.guarantor.findUnique({ where: { id: req.params.id }, select: { photo: true } });
       if (existing?.photo) deleteUploadedFile(existing.photo);
-      photoUrl = `/uploads/guarantors/${req.files.photo[0].filename}`;
+      photoUrl = getFieldUrl(req.files, 'photo', 'guarantors');
     }
     if (req.files?.photo2?.[0]) {
       const existing = await prisma.guarantor.findUnique({ where: { id: req.params.id }, select: { photo2: true } });
       if (existing?.photo2) deleteUploadedFile(existing.photo2);
-      photo2Url = `/uploads/guarantors/${req.files.photo2[0].filename}`;
+      photo2Url = getFieldUrl(req.files, 'photo2', 'guarantors');
     }
     const guarantor = await prisma.guarantor.update({ where: { id: req.params.id }, data: pick(req.body, photoUrl, photo2Url) });
     sendSuccess(res, guarantor, 'ضامن موفقانه بروز شد');

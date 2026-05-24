@@ -2,6 +2,7 @@
 import { useEffect } from 'react';
 import { Printer, X } from 'lucide-react';
 import { formatAfghanDate } from '@/lib/utils';
+import { resolveImgUrl } from '@/lib/imageUrl';
 
 /* ─────────────────────────── types ────────────────────────── */
 export interface BillData {
@@ -228,9 +229,7 @@ export default function ContractBill({ data, lang = 'pashto', onClose, autoPrint
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '3px', minWidth: '72px', flexShrink: 0 }}>
                 {data.customerPhoto ? (
                   <img
-                    src={data.customerPhoto.startsWith('http')
-                      ? data.customerPhoto
-                      : `${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:5000'}${data.customerPhoto}`}
+                    src={resolveImgUrl(data.customerPhoto)!}
                     alt="مشتری"
                     style={{ width: '62px', height: '72px', objectFit: 'cover', border: '2.5px solid #8B4513', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.18)' }}
                     onError={(e: any) => {

@@ -7,13 +7,8 @@ const nextConfig: NextConfig = {
 
   images: {
     remotePatterns: [
-      // Local development
-      { protocol: 'http', hostname: 'localhost', port: '5000', pathname: '/uploads/**' },
-      // Railway production — add NEXT_PUBLIC_BACKEND_HOST in Vercel env vars
-      ...(process.env.NEXT_PUBLIC_BACKEND_HOST
-        ? [{ protocol: 'https' as const, hostname: process.env.NEXT_PUBLIC_BACKEND_HOST, pathname: '/uploads/**' }]
-        : [{ protocol: 'https' as const, hostname: '*.railway.app', pathname: '/uploads/**' }]
-      ),
+      // Cloudinary CDN — all uploaded images are stored here
+      { protocol: 'https', hostname: 'res.cloudinary.com', pathname: '/**' },
     ],
     formats: ['image/webp'],
   },
