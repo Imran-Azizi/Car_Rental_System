@@ -27,12 +27,10 @@ export default function LoginPage() {
       const { token, role, user } = res.data.data;
 
       if (role === 'owner') {
-        // Car owner login — store separately from admin session
         localStorage.setItem('ownerToken', token);
         localStorage.setItem('ownerUser', JSON.stringify(user));
         router.push('/owner/dashboard');
       } else {
-        // Admin / Staff login
         setToken(token);
         setUser(user);
         localStorage.setItem('user', JSON.stringify(user));
@@ -51,73 +49,60 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden"
-      style={{ background: 'linear-gradient(135deg, #1a1400 0%, #3d2c00 50%, #1a1400 100%)' }} dir="rtl">
+    <div className="min-h-screen flex items-center justify-center"
+      style={{ background: '#f5f5f5' }} dir="rtl">
 
-      {/* Background decorations */}
-      <div className="absolute inset-0 opacity-10"
-        style={{ backgroundImage: 'radial-gradient(circle at 25% 25%, #f59e0b 0%, transparent 50%), radial-gradient(circle at 75% 75%, #d97706 0%, transparent 50%)' }} />
-      <div className="absolute top-20 right-20 w-64 h-64 rounded-full opacity-5"
-        style={{ background: 'radial-gradient(circle, #f59e0b, transparent)' }} />
-      <div className="absolute bottom-20 left-20 w-96 h-96 rounded-full opacity-5"
-        style={{ background: 'radial-gradient(circle, #d97706, transparent)' }} />
-
-      <div className="relative z-10 w-full max-w-md mx-4 fade-in">
+      <div className="w-full max-w-md mx-4 fade-in">
         {/* Language switcher */}
         <div className="flex justify-center gap-2 mb-6">
           <button onClick={() => setLang('dari')}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${lang === 'dari' ? 'bg-amber-500 text-white' : 'bg-amber-900/50 text-amber-300 hover:bg-amber-800/50'}`}>
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${lang === 'dari' ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'}`}>
             دری
           </button>
           <button onClick={() => setLang('pashto')}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${lang === 'pashto' ? 'bg-amber-500 text-white' : 'bg-amber-900/50 text-amber-300 hover:bg-amber-800/50'}`}>
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${lang === 'pashto' ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'}`}>
             پښتو
           </button>
         </div>
 
-        <div className="rounded-2xl overflow-hidden shadow-2xl"
-          style={{ background: 'linear-gradient(135deg, #fffdf0, #fef9c3)', border: '2px solid #f59e0b' }}>
-
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           {/* Header */}
-          <div className="p-8 text-center" style={{ background: 'linear-gradient(135deg, #92400e, #b45309)' }}>
-            <div className="flex justify-center mb-4">
-              <div className="w-24 h-24 rounded-2xl overflow-hidden shadow-2xl flex items-center justify-center"
-                style={{ background: '#fff', padding: '6px', border: '3px solid rgba(245,158,11,0.5)' }}>
-                <Image
-                  src="/logo.png"
-                  alt="مرکز کرایه موتر افشار"
-                  width={84}
-                  height={84}
-                  className="object-contain w-full h-full"
-                  priority
-                />
-              </div>
+          <div className="px-8 pt-10 pb-8 text-center">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl mb-4 border border-gray-100 bg-white shadow-sm">
+              <Image
+                src="/logo.png"
+                alt="مرکز کرایه موتر افشار"
+                width={56}
+                height={56}
+                className="object-contain"
+                priority
+              />
             </div>
-            <h1 className="text-2xl font-bold text-white mb-1">{t.appName}</h1>
-            <p className="text-amber-200 text-sm">{t.loginSubtitle}</p>
+            <h1 className="text-xl font-bold text-gray-900">{t.appName}</h1>
+            <p className="text-gray-500 text-sm mt-1">{t.loginSubtitle}</p>
           </div>
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="p-8 space-y-5">
+          <form onSubmit={handleSubmit} className="px-8 pb-8 space-y-4">
 
             {/* Error banner */}
             {error && (
-              <div className="flex items-center gap-3 p-3.5 rounded-xl border border-red-200 bg-red-50">
-                <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
-                <p className="text-red-700 text-sm font-medium">{error}</p>
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 border border-red-100">
+                <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                <p className="text-red-700 text-sm">{error}</p>
               </div>
             )}
 
             {/* Email */}
             <div>
-              <label className="block text-sm font-semibold text-amber-800 mb-1.5">{t.email}</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t.email}</label>
               <div className="relative">
-                <Mail className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-500" />
+                <Mail className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
                   type="email"
                   value={form.email}
                   onChange={e => handleChange('email', e.target.value)}
-                  className="w-full pr-10 pl-4 py-3 rounded-lg input-golden text-sm"
+                  className="w-full pr-10 pl-4 py-2.5 rounded-lg border border-gray-300 text-sm focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none transition-all"
                   placeholder="example@email.com"
                   dir="ltr"
                   autoComplete="email"
@@ -127,26 +112,26 @@ export default function LoginPage() {
 
             {/* Password */}
             <div>
-              <label className="block text-sm font-semibold text-amber-800 mb-1.5">{t.password}</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t.password}</label>
               <div className="relative">
-                <Lock className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-500" />
+                <Lock className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={form.password}
                   onChange={e => handleChange('password', e.target.value)}
-                  className="w-full pr-10 pl-10 py-3 rounded-lg input-golden text-sm"
+                  className="w-full pr-10 pl-10 py-2.5 rounded-lg border border-gray-300 text-sm focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none transition-all"
                   placeholder="••••••••"
                   autoComplete="current-password"
                 />
                 <button type="button" onClick={() => setShowPassword(!showPassword)}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-500 hover:text-amber-700 transition-colors">
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors">
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
             </div>
 
             <button type="submit" disabled={loading}
-              className="w-full py-3 rounded-lg btn-primary font-semibold text-base disabled:opacity-50 disabled:cursor-not-allowed transition-all">
+              className="w-full py-2.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
                   <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
@@ -157,7 +142,7 @@ export default function LoginPage() {
           </form>
         </div>
 
-        <p className="text-center text-amber-400/60 text-xs mt-4">© ۱۴۰۳ مرکز کرایه موتر افشار</p>
+        <p className="text-center text-gray-400 text-xs mt-6">© ۱۴۰۳ مرکز کرایه موتر افشار</p>
       </div>
     </div>
   );

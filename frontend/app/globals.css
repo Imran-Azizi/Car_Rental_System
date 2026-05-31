@@ -67,19 +67,17 @@ body {
 
 /* ── Buttons ───────────────────────────────────── */
 .btn-primary {
-  background: linear-gradient(135deg, var(--golden-500) 0%, var(--golden-600) 100%);
+  background: var(--golden-500);
   color: white;
   font-weight: 600;
   border: 1px solid transparent;
-  box-shadow: 0 1px 3px rgba(120, 53, 15, 0.25), inset 0 1px 0 rgba(255,255,255,0.15);
   transition: all var(--transition);
 }
 .btn-primary:hover {
-  background: linear-gradient(135deg, var(--golden-600) 0%, var(--golden-700) 100%);
-  box-shadow: 0 4px 12px rgba(120, 53, 15, 0.30);
-  transform: translateY(-1px);
+  background: var(--golden-600);
+  box-shadow: var(--shadow-sm);
 }
-.btn-primary:active { transform: translateY(0); box-shadow: var(--shadow-sm); }
+.btn-primary:active { box-shadow: none; }
 
 .btn-secondary {
   background: white;
@@ -121,13 +119,13 @@ body {
 /* ── Sidebar ───────────────────────────────────── */
 /* In RTL the sidebar sits on the RIGHT; border-left is its content-facing edge ✓ */
 .sidebar {
-  background: linear-gradient(180deg, #1a1200 0%, #231800 40%, #1a1200 100%);
-  border-left: 1px solid rgba(245, 158, 11, 0.2);
+  background: #1a1a1a;
+  border-left: 1px solid rgba(245, 158, 11, 0.15);
 }
 
 /* ── Tables ────────────────────────────────────── */
 .table-golden th {
-  background: linear-gradient(135deg, #7c3209 0%, #92400e 100%);
+  background: var(--golden-800);
   color: rgba(255,255,255,0.95);
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -148,9 +146,9 @@ body {
 
 /* ── Step indicators ───────────────────────────── */
 .step-active {
-  background: linear-gradient(135deg, var(--golden-500), var(--golden-600));
+  background: var(--golden-500);
   color: white;
-  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.40);
+  box-shadow: var(--shadow-sm);
 }
 .step-completed { background: #059669; color: white; }
 .step-inactive  { background: #e5e7eb; color: #9ca3af; }
@@ -208,7 +206,7 @@ body {
 
 /* ── Utility ───────────────────────────────────── */
 .border-3   { border-width: 3px; }
-.bg-golden  { background: linear-gradient(135deg, var(--golden-500), var(--golden-600)); }
+.bg-golden  { background: var(--golden-500); }
 .text-golden{ color: var(--golden-700); }
 .border-golden { border-color: var(--golden-500); }
 

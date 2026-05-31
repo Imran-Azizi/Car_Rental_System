@@ -28,6 +28,10 @@ export const getDashboardStats = async (req, res) => {
       pendingContractsList,
       recentPaymentsList,
       expenseSplitsAgg,
+      salaryPaymentsAgg,
+      carOwnerPaymentsAgg,
+      totalDelayPenaltyAgg,
+      liveActiveContracts,
     ] = await Promise.all([
       prisma.car.count(),
       prisma.car.count({ where: { status: 'AVAILABLE' } }),
@@ -42,19 +46,14 @@ export const getDashboardStats = async (req, res) => {
         where: { paymentDate: { gte: sixMonthsAgo } },
         select: { amount: true, paymentDate: true },
       }),
-      // Pending = remaining on ACTIVE + OVERDUE contracts
       prisma.rentalContract.aggregate({
         _sum: { remainingAmount: true },
         where: { status: { in: ['ACTIVE', 'OVERDUE'] } },
       }),
-      // Total contract value across ALL contracts
       prisma.rentalContract.aggregate({ _sum: { totalRent: true } }),
-      // Total actually received (sum of all payments ever made)
       prisma.payment.aggregate({ _sum: { amount: true } }),
-      // Owner / admin share from ALL contracts
       prisma.rentalContract.aggregate({ _sum: { ownerShare: true } }),
       prisma.rentalContract.aggregate({ _sum: { adminShare: true } }),
-      // Owner / admin share from COMPLETED contracts only
       prisma.rentalContract.aggregate({ _sum: { ownerShare: true }, where: { status: 'COMPLETED' } }),
       prisma.rentalContract.aggregate({ _sum: { adminShare: true }, where: { status: 'COMPLETED' } }),
       prisma.rentalContract.findMany({
@@ -71,7 +70,8 @@ export const getDashboardStats = async (req, res) => {
         take: 20,
         select: {
           id: true, contractNumber: true, remainingAmount: true,
-          totalRent: true, status: true, endDate: true,
+          totalRent: true, totalDelayPenalty: true, status: true, endDate: true,
+          endTime: true, rentPrice: true, delayPenaltyRate: true,
           customer: { select: { fullName: true, phoneNumber: true } },
           car:      { select: { carName: true, plateNumber: true } },
         },
@@ -90,6 +90,17 @@ export const getDashboardStats = async (req, res) => {
         },
       }),
       prisma.expense.aggregate({ _sum: { adminShare: true, ownerShare: true, amount: true } }),
+      prisma.salaryPayment.aggregate({ _sum: { amount: true }, _count: true }),
+      prisma.carOwnerPayment.aggregate({ _sum: { amount: true }, _count: true }),
+      prisma.rentalContract.aggregate({ _sum: { totalDelayPenalty: true } }),
+      prisma.rentalContract.findMany({
+        where: { status: { in: ['ACTIVE', 'OVERDUE'] } },
+        select: {
+          id: true, status: true, endDate: true, endTime: true,
+          rentPrice: true, delayPenaltyRate: true, totalRent: true,
+          totalDelayPenalty: true, remainingAmount: true,
+        },
+      }),
     ]);
 
     const totalContractValue   = totalContractValueAgg._sum.totalRent      || 0;
@@ -102,8 +113,19 @@ export const getDashboardStats = async (req, res) => {
     const totalExpenses        = expenseSplitsAgg._sum.amount               || 0;
     const adminExpenses        = expenseSplitsAgg._sum.adminShare           || 0;
     const ownerExpenses        = expenseSplitsAgg._sum.ownerShare           || 0;
-    const adminNetIncome       = adminIncome - adminExpenses;
+    const totalSalaryPaid      = salaryPaymentsAgg._sum.amount              || 0;
+    const totalSalaryCount     = salaryPaymentsAgg._count                   || 0;
+    const totalCarOwnerPaid    = carOwnerPaymentsAgg._sum.amount            || 0;
+    const totalCarOwnerPaymentsCount = carOwnerPaymentsAgg._count           || 0;
+    const totalDelayPenalty    = totalDelayPenaltyAgg._sum.totalDelayPenalty || 0;
+
+    // Enrich pending contracts with live overdue data
+    const { enrichWithOverdue } = await import('../utils/overdueUtils.js');
+    const enrichedPending = pendingContractsList.map(enrichWithOverdue);
+
+    const adminNetIncome       = adminIncome - adminExpenses - totalSalaryPaid;
     const ownerNetIncome       = ownerIncome - ownerExpenses;
+    const ownerOutstanding     = ownerNetIncome - totalCarOwnerPaid;
 
     // Monthly income chart — last 6 months, sorted ascending
     const monthlyIncome = {};
@@ -129,11 +151,15 @@ export const getDashboardStats = async (req, res) => {
       ownerIncome,        adminIncome,
       ownerIncomeCompleted, adminIncomeCompleted,
       totalExpenses,      adminExpenses,        ownerExpenses,
+      totalSalaryPaid,    totalSalaryCount,
+      totalCarOwnerPaid,  totalCarOwnerPaymentsCount,
       adminNetIncome,     ownerNetIncome,
+      ownerOutstanding,
+      totalDelayPenalty,
       // Charts & lists
       monthlyIncome: monthlyIncomeSorted,
       recentContracts,
-      pendingContractsList,
+      pendingContractsList: enrichedPending,
       recentPaymentsList,
     });
   } catch (err) { sendError(res, err.message); }

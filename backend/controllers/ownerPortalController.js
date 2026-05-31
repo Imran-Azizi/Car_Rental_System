@@ -1,5 +1,6 @@
 import prisma from '../utils/prisma.js';
 import { sendSuccess, sendError } from '../utils/response.js';
+import { enrichWithOverdue, resolvePenaltyRate, calcLiveOverdue } from '../utils/overdueUtils.js';
 
 /**
  * Strip all sensitive financial/customer data from a contract while it has
@@ -9,25 +10,29 @@ import { sendSuccess, sendError } from '../utils/response.js';
 function maskIfActive(contract) {
   if (!contract) return contract;
   const shouldMask = contract.status === 'ACTIVE' || contract.status === 'OVERDUE';
-  if (!shouldMask) return contract;
+  if (!shouldMask) return enrichWithOverdue(contract);
   return {
     id:              contract.id,
     contractNumber:  contract.contractNumber,
     status:          contract.status,
     startDate:       contract.startDate,
     endDate:         contract.endDate,
+    endTime:         contract.endTime,
+    rentPrice:       contract.rentPrice,
+    delayPenaltyRate: contract.delayPenaltyRate || 0,
     car:             contract.car     ?? null,
     createdAt:       contract.createdAt ?? null,
-    // All sensitive fields hidden until the car is returned
     customer:        null,
     guarantor:       null,
     totalRent:       null,
     remainingAmount: null,
     advancePayment:  null,
-    rentPrice:       null,
     ownerShare:      null,
     adminShare:      null,
     payments:        [],
+    overdueCharges:  null,
+    totalDelayPenalty: null,
+    delayDays:       null,
     _masked:         true,
   };
 }
@@ -39,7 +44,8 @@ export const getOwnerDashboard = async (req, res) => {
     const [
       cars, contractStats, totalEarnings, activeContracts,
       recentContracts, ownerShareAgg, totalContractValue,
-      expenseDeductionsAgg, unreadNotificationCount,
+      expenseDeductionsAgg, ownerPaymentsAgg, unreadNotificationCount,
+      delayPenaltyAgg,
     ] = await Promise.all([
       prisma.car.findMany({
         where: { ownerId },
@@ -79,8 +85,18 @@ export const getOwnerDashboard = async (req, res) => {
         where: { car: { ownerId } },
         _sum: { ownerShare: true },
       }),
+      prisma.carOwnerPayment.aggregate({
+        where: { ownerId },
+        _sum: { amount: true },
+        _count: true,
+      }),
       // Unread notifications count
       prisma.ownerNotification.count({ where: { ownerId, isRead: false } }),
+      // Total delay penalty for this owner's contracts
+      prisma.rentalContract.aggregate({
+        where: { car: { ownerId } },
+        _sum: { totalDelayPenalty: true },
+      }),
     ]);
 
     const totalCars     = cars.length;
@@ -93,6 +109,9 @@ export const getOwnerDashboard = async (req, res) => {
     const ownerShareTotal      = ownerShareAgg._sum.ownerShare || 0;
     const totalExpenseDeducted = expenseDeductionsAgg._sum.ownerShare || 0;
     const netOwnerShare        = ownerShareTotal - totalExpenseDeducted;
+    const totalPaidToOwner     = ownerPaymentsAgg._sum.amount || 0;
+    const remainingOwnerShare  = netOwnerShare - totalPaidToOwner;
+    const totalDelayPenalty    = delayPenaltyAgg._sum.totalDelayPenalty || 0;
 
     sendSuccess(res, {
       stats: {
@@ -105,8 +124,12 @@ export const getOwnerDashboard = async (req, res) => {
         ownerShareTotal,
         totalExpenseDeducted,
         netOwnerShare,
+        totalPaidToOwner,
+        ownerPaymentCount:     ownerPaymentsAgg._count,
+        remainingOwnerShare,
         completedContracts:    statusMap['COMPLETED'] || 0,
         cancelledContracts:    statusMap['CANCELLED'] || 0,
+        totalDelayPenalty,
       },
       recentContracts: recentContracts.map(maskIfActive),
       cars,
@@ -174,7 +197,62 @@ export const getOwnerContracts = async (req, res) => {
       },
     });
 
-    sendSuccess(res, contracts.map(maskIfActive));
+    sendSuccess(res, contracts.map(c => {
+      const masked = maskIfActive(c);
+      if (masked._masked) {
+        const penaltyRate = resolvePenaltyRate(c);
+        const { overdueDays, overdueCharges } = calcLiveOverdue(c.endDate, c.endTime, penaltyRate);
+        masked.liveOverdueDays = overdueDays;
+        masked.liveOverdueCharges = overdueCharges;
+        masked.liveDelayPenaltyRate = penaltyRate;
+        masked.liveTotalDelayPenalty = overdueCharges;
+        masked.liveFinalTotal = (parseFloat(c.totalRent) || 0) + overdueCharges;
+      }
+      return masked;
+    }));
+  } catch (err) {
+    sendError(res, err.message);
+  }
+};
+
+export const getOwnerPayments = async (req, res) => {
+  try {
+    const ownerId = req.owner.id;
+    const { search, page = 1, limit = 50 } = req.query;
+    const skip = (Number(page) - 1) * Number(limit);
+    const where = { ownerId };
+
+    if (search) {
+      where.OR = [
+        { receiptNumber: { contains: search, mode: 'insensitive' } },
+        { paymentMethod: { contains: search, mode: 'insensitive' } },
+        { notes: { contains: search, mode: 'insensitive' } },
+        { createdBy: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    const [payments, total, aggregate] = await Promise.all([
+      prisma.carOwnerPayment.findMany({
+        where,
+        orderBy: { paymentDate: 'desc' },
+        skip,
+        take: Number(limit),
+      }),
+      prisma.carOwnerPayment.count({ where }),
+      prisma.carOwnerPayment.aggregate({ where: { ownerId }, _sum: { amount: true }, _count: true }),
+    ]);
+
+    sendSuccess(res, {
+      payments,
+      totalPaid: aggregate._sum.amount || 0,
+      count: aggregate._count,
+      pagination: {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(total / Number(limit)),
+      },
+    });
   } catch (err) {
     sendError(res, err.message);
   }

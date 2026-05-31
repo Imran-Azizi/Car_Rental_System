@@ -305,7 +305,7 @@ export default function AllOrdersPage() {
                         </div>
                       )}
                     </td>
-                    <td className="px-3 py-2" style={{ minWidth: '148px' }}>
+                    <td className="px-3 py-2" style={{ minWidth: '168px' }}>
                       {editingRentId === c.id ? (
                         /* ── Inline edit form ── */
                         <div className="flex flex-col gap-1">
@@ -322,7 +322,6 @@ export default function AllOrdersPage() {
                                 if (e.key === 'Escape') { setEditingRentId(null); setTotalRentError(''); }
                               }}
                             />
-                            {/* Save */}
                             <button
                               onClick={() => handleSaveTotalRent(c.id)}
                               disabled={savingTotalRent}
@@ -333,7 +332,6 @@ export default function AllOrdersPage() {
                                 ? <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                                 : <CheckIcon className="w-3.5 h-3.5" />}
                             </button>
-                            {/* Cancel */}
                             <button
                               onClick={() => { setEditingRentId(null); setTotalRentError(''); }}
                               disabled={savingTotalRent}
@@ -351,26 +349,32 @@ export default function AllOrdersPage() {
                         </div>
                       ) : (
                         /* ── Display mode ── */
-                        <div className="flex items-center gap-1.5 group">
-                          <div>
-                            <div className="text-sm font-medium">{formatCurrency(c.totalRent)}</div>
-                            {isOverdue && overdueCharge > 0 && (
-                              <div className="text-xs font-bold text-red-600">+{formatCurrency(overdueCharge)} {lang === 'dari' ? 'جریمه' : 'جریمه'}</div>
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-1.5 group">
+                            <div>
+                              <div className="text-sm font-medium">{formatCurrency(c.totalRent)}</div>
+                              {isOverdue && overdueCharge > 0 && (
+                                <div className="text-xs font-bold text-red-600">+{formatCurrency(overdueCharge)} {lang === 'dari' ? 'جریمه' : 'جریمه'}</div>
+                              )}
+                            </div>
+                            {canEditOrder(c).allowed && (
+                              <button
+                                onClick={() => {
+                                  setEditingRentId(c.id);
+                                  setTotalRentInput(String(c.totalRent ?? 0));
+                                  setTotalRentError('');
+                                }}
+                                className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-amber-500 hover:bg-amber-100 hover:text-amber-700 transition-all shrink-0"
+                                title={lang === 'dari' ? 'ویرایش مجموع کرایه' : 'د کرایې مجموع سمول'}
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
                             )}
                           </div>
-                          {/* Edit icon — only when canEdit */}
-                          {canEditOrder(c).allowed && (
-                            <button
-                              onClick={() => {
-                                setEditingRentId(c.id);
-                                setTotalRentInput(String(c.totalRent ?? 0));
-                                setTotalRentError('');
-                              }}
-                              className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-amber-500 hover:bg-amber-100 hover:text-amber-700 transition-all shrink-0"
-                              title={lang === 'dari' ? 'ویرایش مجموع کرایه' : 'د کرایې مجموع سمول'}
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
+                          {isOverdue && overdueCharge > 0 && (
+                            <div className="text-xs font-bold text-red-800 bg-red-100 px-1.5 py-0.5 rounded inline-block">
+                              {lang === 'dari' ? 'نهایی:' : 'وروستی:'} {formatCurrency(finalTotal)}
+                            </div>
                           )}
                         </div>
                       )}
@@ -379,14 +383,17 @@ export default function AllOrdersPage() {
                       <div className={`text-sm font-medium ${c.remainingAmount > 0 ? 'text-red-600' : 'text-green-600'}`}>
                         {formatCurrency(c.remainingAmount)}
                       </div>
-                      {isOverdue && overdueCharge > 0 && (
-                        <div className="text-xs font-bold text-red-700 bg-red-100 px-1.5 py-0.5 rounded mt-0.5 inline-block">
-                          {lang === 'dari' ? 'مجموع:' : 'ټول:'} {formatCurrency(finalTotal)}
-                        </div>
-                      )}
                     </td>
                     <td className="px-4 py-3">
-                      <Badge variant={statusMap[c.status]?.variant} label={statusMap[c.status]?.[lang] || c.status} />
+                      <div className="flex flex-col gap-1 items-end">
+                        <Badge variant={statusMap[c.status]?.variant} label={statusMap[c.status]?.[lang] || c.status} />
+                        {isOverdue && overdueDays > 0 && (
+                          <span className="text-[10px] font-bold text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+                            <AlertTriangle className="w-2.5 h-2.5" />
+                            {lang === 'dari' ? 'تاخیر' : 'ځنډ'}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-3 py-3">
                       <div className="flex flex-wrap items-center gap-1">
@@ -520,6 +527,7 @@ export default function AllOrdersPage() {
                 [lang === 'dari' ? 'تاریخ تحویل' : 'د ورلو نیټه', `${formatDate(viewOrder.startDate)}${viewOrder.startTime ? '  ' + viewOrder.startTime : ''}`],
                 [lang === 'dari' ? 'تاریخ برگشت' : 'د راستون نیټه', `${formatDate(viewOrder.endDate)}${viewOrder.endTime ? '  ' + viewOrder.endTime : ''}`],
                 [lang === 'dari' ? 'کرایه روزانه' : 'ورځنۍ کرایه', formatCurrency(viewOrder.rentPrice || viewOrder.dailyRate || 0), false, 'text-amber-800 font-bold'],
+                [lang === 'dari' ? 'نرخ جریمه تأخیر' : 'د ځنډ جریمه نرخ', viewOrder.liveDelayPenaltyRate || viewOrder.delayPenaltyRate || viewOrder.rentPrice ? formatCurrency(viewOrder.liveDelayPenaltyRate || viewOrder.delayPenaltyRate || viewOrder.rentPrice) : (lang === 'dari' ? 'تعین نشده' : 'نه ټاکل شوی'), false, 'text-orange-700 font-bold'],
                 [lang === 'dari' ? 'مجموع کرایه' : 'ټوله کرایه', formatCurrency(viewOrder.totalRent), false, 'text-amber-900 font-black text-base'],
               ]}
             />
@@ -548,7 +556,7 @@ export default function AllOrdersPage() {
                     {lang === 'dari' ? 'محاسبه تأخیر / ناوقت' : 'د ناوخته حساب'}
                   </h4>
                   {viewOrder.status === 'OVERDUE' && (
-                    <span className="mr-auto text-xs font-bold bg-white/20 text-white px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <span className="mr-auto text-xs font-bold bg-white/20 text-white px-2 py-0.5 rounded-full flex items-center gap-1 animate-pulse">
                       <Clock className="w-3 h-3" />
                       {lang === 'dari' ? 'در حال تأخیر' : 'اوس ناوخته دی'}
                     </span>
@@ -557,31 +565,37 @@ export default function AllOrdersPage() {
                 {/* Body */}
                 <div className="p-4 bg-red-50 space-y-3">
                   {/* Stats row */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                     {[
                       {
                         label: lang === 'dari' ? 'کرایه اصلی' : 'اصلي کرایه',
-                        value: formatCurrency(viewOrder.totalRent),
+                        value: formatCurrency(viewOrder.totalRent - (viewOrder.liveTotalDelayPenalty ?? viewOrder.totalDelayPenalty ?? viewOrder.overdueCharges ?? 0)),
                         cls: 'text-gray-800',
                         bg: 'bg-white border-gray-200',
                       },
                       {
-                        label: lang === 'dari' ? 'کرایه روزانه' : 'ورځنۍ کرایه',
-                        value: formatCurrency(viewOrder.rentPrice || 0),
-                        cls: 'text-amber-700',
-                        bg: 'bg-amber-50 border-amber-200',
+                        label: lang === 'dari' ? 'نرخ جریمه روزانه' : 'د جریمې ورځنی نرخ',
+                        value: formatCurrency(viewOrder.liveDelayPenaltyRate ?? viewOrder.delayPenaltyRate ?? viewOrder.rentPrice ?? 0),
+                        cls: 'text-orange-700',
+                        bg: 'bg-orange-50 border-orange-200',
                       },
                       {
                         label: lang === 'dari' ? 'روزهای تأخیر' : 'د ناوخته ورځې',
-                        value: `${viewOrder.liveOverdueDays ?? 0} ${lang === 'dari' ? 'روز' : 'ورځ'}`,
+                        value: `${viewOrder.liveOverdueDays ?? viewOrder.delayDays ?? 0} ${lang === 'dari' ? 'روز' : 'ورځ'}`,
                         cls: 'text-red-700 font-black',
                         bg: 'bg-red-100 border-red-300',
                       },
                       {
-                        label: lang === 'dari' ? 'جریمه تأخیر' : 'د ناوخته جریمه',
-                        value: formatCurrency(viewOrder.liveOverdueCharges ?? viewOrder.overdueCharges ?? 0),
+                        label: lang === 'dari' ? 'مجموع جریمه' : 'ټوله جریمه',
+                        value: formatCurrency(viewOrder.liveTotalDelayPenalty ?? viewOrder.totalDelayPenalty ?? viewOrder.liveOverdueCharges ?? viewOrder.overdueCharges ?? 0),
                         cls: 'text-red-700 font-black',
                         bg: 'bg-red-100 border-red-300',
+                      },
+                      {
+                        label: lang === 'dari' ? 'مجموع نهایی' : 'وروستی ټول',
+                        value: formatCurrency(viewOrder.liveFinalTotal ?? (viewOrder.totalRent + (viewOrder.liveTotalDelayPenalty ?? viewOrder.totalDelayPenalty ?? viewOrder.liveOverdueCharges ?? viewOrder.overdueCharges ?? 0))),
+                        cls: 'text-red-900 font-black text-base',
+                        bg: 'bg-red-200 border-red-400',
                       },
                     ].map(({ label, value, cls, bg }) => (
                       <div key={label} className={`rounded-xl p-3 border text-center ${bg}`}>
@@ -593,10 +607,10 @@ export default function AllOrdersPage() {
                   {/* Final total */}
                   <div className="flex items-center justify-between px-4 py-3 rounded-xl border-2 border-red-400 bg-red-100">
                     <span className="text-sm font-bold text-red-800">
-                      {lang === 'dari' ? 'مجموع نهایی (اصلی + جریمه)' : 'وروستی ټول (اصلي + جریمه)'}
+                      {lang === 'dari' ? 'مبلغ قابل پرداخت نهایی (اصلی + جریمه)' : 'وروستی قابل پرداخت مبلغ (اصلي + جریمه)'}
                     </span>
                     <span className="text-xl font-black text-red-900">
-                      {formatCurrency(viewOrder.liveFinalTotal ?? (viewOrder.totalRent + (viewOrder.liveOverdueCharges ?? viewOrder.overdueCharges ?? 0)))}
+                      {formatCurrency(viewOrder.liveFinalTotal ?? (viewOrder.totalRent + (viewOrder.liveTotalDelayPenalty ?? viewOrder.totalDelayPenalty ?? viewOrder.liveOverdueCharges ?? viewOrder.overdueCharges ?? 0)))}
                     </span>
                   </div>
                 </div>

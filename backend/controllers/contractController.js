@@ -61,13 +61,15 @@ export const createContract = async (req, res) => {
     const totalRent  = parseFloat(req.body.totalRent)  || 0;
     const advance    = parseFloat(req.body.advancePayment) || 0;
     const remaining  = parseFloat(req.body.remainingAmount);
+    const delayPenaltyRate = parseFloat(req.body.delayPenaltyRate) || 0;
 
     if (rentPrice  < 0) return sendError(res, 'کرایه روزانه نمی‌تواند منفی باشد', 400);
     if (totalRent  < 0) return sendError(res, 'مجموع کرایه نمی‌تواند منفی باشد', 400);
     if (advance    < 0) return sendError(res, 'پیش پرداخت نمی‌تواند منفی باشد', 400);
     if (!isNaN(remaining) && remaining < 0) return sendError(res, 'باقی مانده نمی‌تواند منفی باشد', 400);
+    if (delayPenaltyRate < 0) return sendError(res, 'نرخ جریمه نمی‌تواند منفی باشد', 400);
 
-    const contractNumber = generateContractNumber();
+    const contractNumber = await generateContractNumber();
     const { ownerShare, adminShare } = calcShares(req.body.totalRent);
 
     const billDocPhoto     = fileUrl(req.files, 'billDocPhoto');
@@ -92,6 +94,7 @@ export const createContract = async (req, res) => {
       contractNumber,
       ownerShare,
       adminShare,
+      delayPenaltyRate,
       ...(req.body.driverName    && { driverName:    req.body.driverName }),
       ...(req.body.driverLicense && { driverLicense: req.body.driverLicense }),
       ...(req.body.driverPhone   && { driverPhone:   req.body.driverPhone }),
@@ -162,7 +165,7 @@ export const updateContract = async (req, res) => {
     const updateData = { ...req.body };
 
     // Coerce string values from multipart/JSON body to the correct Prisma types
-    ['rentPrice', 'totalRent', 'advancePayment', 'remainingAmount', 'ownerShare', 'adminShare'].forEach(f => {
+    ['rentPrice', 'totalRent', 'advancePayment', 'remainingAmount', 'ownerShare', 'adminShare', 'delayPenaltyRate'].forEach(f => {
       if (updateData[f] !== undefined) updateData[f] = parseFloat(updateData[f]) || 0;
     });
     if (updateData.agreementConfirmed !== undefined) {
@@ -188,6 +191,27 @@ export const updateContract = async (req, res) => {
       });
       const totalPaid = paidAgg._sum.amount || 0;
       updateData.remainingAmount = Math.max(0, newTotal - totalPaid);
+    }
+
+    // Recalculate shares when totalDelayPenalty changes
+    if (updateData.totalDelayPenalty !== undefined) {
+      const existingContract = await prisma.rentalContract.findUnique({
+        where: { id: req.params.id },
+        select: { totalRent: true },
+      });
+      const baseRent = existingContract?.totalRent || 0;
+      const newPenalty = parseFloat(String(updateData.totalDelayPenalty)) || 0;
+      const finalTotal = baseRent + newPenalty;
+      const { ownerShare, adminShare } = calcShares(finalTotal);
+      updateData.ownerShare = ownerShare;
+      updateData.adminShare = adminShare;
+
+      const paidAgg = await prisma.payment.aggregate({
+        _sum: { amount: true },
+        where: { contractId: req.params.id },
+      });
+      const totalPaid = paidAgg._sum.amount || 0;
+      updateData.remainingAmount = Math.max(0, finalTotal - totalPaid);
     }
 
     // Handle uploaded photos
@@ -229,23 +253,50 @@ export const updateContract = async (req, res) => {
 
 export const markAsReturned = async (req, res) => {
   try {
-    // Freeze the live overdue charges before completing the contract
     const existing = await prisma.rentalContract.findUnique({
       where: { id: req.params.id },
-      select: { endDate: true, endTime: true, rentPrice: true },
+      select: { endDate: true, endTime: true, rentPrice: true, delayPenaltyRate: true, totalRent: true },
     });
-    const { overdueCharges: frozenCharges } = existing
-      ? calcLiveOverdue(existing.endDate, existing.endTime, existing.rentPrice)
-      : { overdueCharges: 0 };
+
+    const penaltyRate = existing?.delayPenaltyRate > 0 ? existing.delayPenaltyRate : existing?.rentPrice || 0;
+    const { overdueDays, overdueCharges: frozenCharges } = existing
+      ? calcLiveOverdue(existing.endDate, existing.endTime, penaltyRate)
+      : { overdueDays: 0, overdueCharges: 0 };
+
+    const baseRent     = parseFloat(existing?.totalRent) || 0;
+    const totalPenalty = frozenCharges;
+    const finalTotal   = baseRent + totalPenalty;
+    const { ownerShare, adminShare } = calcShares(finalTotal);
 
     const contract = await prisma.rentalContract.update({
       where: { id: req.params.id },
-      data: { status: 'COMPLETED', overdueCharges: frozenCharges, completedAt: new Date() },
+      data: {
+        status: 'COMPLETED',
+        overdueCharges: frozenCharges,
+        totalDelayPenalty: totalPenalty,
+        delayDays: overdueDays,
+        delayPenaltyRate: penaltyRate,
+        totalRent: finalTotal,
+        ownerShare,
+        adminShare,
+        completedAt: new Date(),
+      },
       include: { car: true },
     });
     await prisma.car.update({ where: { id: contract.carId }, data: { status: 'AVAILABLE' } });
 
-    // Notify car owner: car returned, full details now visible
+    // Recalculate remaining based on all payments
+    const totalPaidAgg = await prisma.payment.aggregate({
+      _sum: { amount: true },
+      where: { contractId: req.params.id },
+    });
+    const totalPaid = totalPaidAgg._sum.amount || 0;
+    const remaining = Math.max(0, finalTotal - totalPaid);
+    await prisma.rentalContract.update({
+      where: { id: req.params.id },
+      data: { remainingAmount: remaining },
+    });
+
     const ownerId = contract.car?.ownerId;
     if (ownerId) {
       prisma.ownerNotification.create({
@@ -255,12 +306,16 @@ export const markAsReturned = async (req, res) => {
           message: [
             `موتر ${contract.car.carName} برگشت داده شد.`,
             `شماره قرارداد: ${contract.contractNumber}`,
-            `سهم شما از این قرارداد: ${contract.ownerShare || 0} افغانی`,
+            `کرایه اصلی: ${baseRent} افغانی`,
+            `روزهای تأخیر: ${overdueDays} روز`,
+            `جریمه تأخیر: ${totalPenalty} افغانی`,
+            `مجموع نهایی: ${finalTotal} افغانی`,
+            `سهم شما از این قرارداد: ${ownerShare} افغانی`,
             `اکنون می‌توانید تمام جزئیات مالی و اطلاعات قرارداد را در پنل خود مشاهده کنید.`,
           ].join('\n'),
           type:   'RETURN',
           carId:  contract.carId,
-          amount: contract.ownerShare || 0,
+          amount: ownerShare,
         },
       }).catch(() => {});
     }
@@ -278,16 +333,20 @@ export const addPayment = async (req, res) => {
     });
     const [totalPaidResult, contract] = await Promise.all([
       prisma.payment.aggregate({ _sum: { amount: true }, where: { contractId: id } }),
-      prisma.rentalContract.findUnique({ where: { id }, select: { totalRent: true } }),
+      prisma.rentalContract.findUnique({
+        where: { id },
+        select: { totalRent: true, totalDelayPenalty: true },
+      }),
     ]);
-    const totalPaid     = totalPaidResult._sum.amount || 0;
-    const remaining     = Math.max(0, (contract?.totalRent || 0) - totalPaid);
+    const totalPaid       = totalPaidResult._sum.amount || 0;
+    const baseRent        = contract?.totalRent || 0;
+    const delayPenalty    = contract?.totalDelayPenalty || 0;
+    const totalOwed       = baseRent + delayPenalty;
+    const remaining       = Math.max(0, totalOwed - totalPaid);
     await prisma.rentalContract.update({
       where: { id },
       data: { remainingAmount: remaining },
     });
-    /* Return the new remainingAmount so the frontend can decide
-       whether to automatically mark the order as returned. */
     sendSuccess(res, { payment, remainingAmount: remaining }, 'پرداخت موفقانه ثبت شد', 201);
   } catch (err) { sendError(res, err.message); }
 };

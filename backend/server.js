@@ -18,6 +18,7 @@ import ownerAuthRoutes from './routes/ownerAuth.js';
 import ownerPortalRoutes from './routes/ownerPortal.js';
 import expenseRoutes from './routes/expenses.js';
 import draftRoutes from './routes/drafts.js';
+import employeeRoutes from './routes/employees.js';
 import { cleanupExpiredDrafts } from './controllers/draftController.js';
 import { autoMarkOverdue } from './controllers/contractController.js';
 
@@ -107,6 +108,7 @@ app.use('/api/owner-auth',   ownerAuthRoutes);
 app.use('/api/owner-portal', ownerPortalRoutes);
 app.use('/api/expenses',     expenseRoutes);
 app.use('/api/drafts',       draftRoutes);
+app.use('/api/employees',    employeeRoutes);
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get('/api/health', async (req, res) => {

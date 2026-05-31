@@ -31,6 +31,7 @@ model CarOwner {
   updatedAt     DateTime @updatedAt
   cars          Car[]
   notifications OwnerNotification[]
+  payments      CarOwnerPayment[]
 
   @@index([fullName])
   @@index([phoneNumber])
@@ -146,6 +147,9 @@ model RentalContract {
   driverLicense       String?
   driverPhone         String?
   overdueCharges      Float          @default(0)
+  delayPenaltyRate    Float          @default(0)
+  totalDelayPenalty   Float          @default(0)
+  delayDays           Int            @default(0)
   completedAt         DateTime?
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
@@ -243,5 +247,57 @@ model OrderDraft {
   updatedAt DateTime @updatedAt
 
   @@index([updatedAt])
+  @@index([createdAt])
+}
+
+model Employee {
+  id              String          @id @default(cuid())
+  fullName        String
+  fatherName      String
+  grandfatherName String?
+  tazkiraNumber   String          @unique
+  baseSalary      Float
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  salaryPayments  SalaryPayment[]
+
+  @@index([fullName])
+  @@index([tazkiraNumber])
+  @@index([createdAt])
+}
+
+model SalaryPayment {
+  id            String   @id @default(cuid())
+  employeeId    String
+  amount        Float
+  paymentDate   DateTime @default(now())
+  paymentMethod String?
+  notes         String?
+  receiptNumber String   @unique
+  createdBy     String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  employee      Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([paymentDate])
+  @@index([createdAt])
+}
+
+model CarOwnerPayment {
+  id            String   @id @default(cuid())
+  ownerId       String
+  amount        Float
+  paymentDate   DateTime @default(now())
+  paymentMethod String?
+  notes         String?
+  receiptNumber String   @unique
+  createdBy     String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  owner         CarOwner @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+  @@index([paymentDate])
   @@index([createdAt])
 }

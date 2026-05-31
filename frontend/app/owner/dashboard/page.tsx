@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ownerPortalAPI } from '@/lib/api';
-import { Car, FileText, TrendingUp, DollarSign, CheckCircle, Clock, ArrowLeft, Activity, Hourglass, TrendingDown, Wallet, Bell, CalendarClock, Lock } from 'lucide-react';
+import { Car, FileText, TrendingUp, DollarSign, CheckCircle, Clock, ArrowLeft, Activity, Hourglass, TrendingDown, Wallet, Bell, CalendarClock, Lock, Banknote } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { formatAfghanDate, formatCurrency } from '@/lib/utils';
 
@@ -60,6 +60,7 @@ export default function OwnerDashboardPage() {
     { label: 'سفارش‌های فعال', value: stats?.activeContracts ?? 0,                   icon: FileText,    gradient: 'linear-gradient(135deg,#8b5cf6,#7c3aed)' },
     { label: 'سهم من از کرایه', value: formatCurrency(stats?.ownerShareTotal ?? 0),   icon: TrendingUp,  gradient: 'linear-gradient(135deg,#0d9488,#0f766e)' },
     { label: 'کسر مصارف',       value: formatCurrency(stats?.totalExpenseDeducted ?? 0), icon: TrendingDown, gradient: 'linear-gradient(135deg,#ef4444,#dc2626)', isNegative: true },
+    { label: 'پول داده شده',    value: formatCurrency(stats?.totalPaidToOwner ?? 0), icon: Banknote, gradient: 'linear-gradient(135deg,#0891b2,#0e7490)', isHighlight: true },
     { label: 'درآمد خالص',      value: formatCurrency(stats?.netOwnerShare ?? 0),     icon: Wallet,      gradient: 'linear-gradient(135deg,#059669,#047857)', isHighlight: true },
     { label: 'مجموع کرایه‌ها', value: formatCurrency(stats?.totalContractValue ?? 0), icon: DollarSign,  gradient: 'linear-gradient(135deg,#f59e0b,#92400e)' },
   ];

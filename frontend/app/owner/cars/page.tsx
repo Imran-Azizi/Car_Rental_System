@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { ownerPortalAPI } from '@/lib/api';
 import { Car, Search, Filter, Image as ImageIcon, CalendarClock } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { formatCurrency, formatAfghanDate } from '@/lib/utils';
+import { formatAfghanDate } from '@/lib/utils';
 import { resolveImgUrl } from '@/lib/imageUrl';
 
 const statusConfig: Record<string, { label: string; color: string; bg: string; dot: string }> = {
@@ -131,7 +131,6 @@ export default function OwnerCarsPage() {
 
                   <div className="flex items-center justify-between text-xs text-amber-600 mb-3">
                     <span>رنگ: {car.color}</span>
-                    <span>{formatCurrency(car.dailyRate)} / روز</span>
                   </div>
 
                   {activeContract && (

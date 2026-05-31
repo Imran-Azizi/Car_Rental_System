@@ -1,9 +1,13 @@
 /**
- * Overdue calculation utilities for rental contracts.
+ * Overdue / delay penalty calculation utilities for rental contracts.
  *
- * Business rule:
- *   Every completed 24-hour period after the official return deadline
- *   incurs one additional daily rental charge.
+ * Business rules:
+ *   - Every completed 24-hour period after the official return deadline
+ *     incurs one day of delay penalty.
+ *   - The daily penalty rate defaults to the contract's rentPrice (daily rate)
+ *     but can be overridden via delayPenaltyRate on the contract.
+ *   - The total delay penalty is added to the original totalRent to produce
+ *     the final payable amount.
  *
  * Deadline resolution:
  *   - endTime present and not '00:00' → use exact datetime
@@ -23,10 +27,19 @@ export function buildDeadline(endDate, endTime) {
     const [h, m] = endTime.split(':').map(Number);
     d.setHours(h, m, 0, 0);
   } else {
-    // No specific return time → entire end-day is included; charge starts next day
     d.setHours(23, 59, 59, 999);
   }
   return d;
+}
+
+/**
+ * Resolve the daily penalty rate for a contract.
+ * Uses delayPenaltyRate if set and > 0, otherwise falls back to rentPrice.
+ */
+export function resolvePenaltyRate(contract) {
+  const explicit = parseFloat(contract?.delayPenaltyRate);
+  if (explicit > 0) return explicit;
+  return parseFloat(contract?.rentPrice) || 0;
 }
 
 /**
@@ -34,10 +47,10 @@ export function buildDeadline(endDate, endTime) {
  *
  * @param {Date|string} endDate
  * @param {string|null}  endTime
- * @param {number}       rentPrice  daily rate
+ * @param {number}       penaltyRate  daily penalty rate
  * @returns {{ overdueDays: number, overdueCharges: number, deadline: Date }}
  */
-export function calcLiveOverdue(endDate, endTime, rentPrice) {
+export function calcLiveOverdue(endDate, endTime, penaltyRate) {
   const deadline = buildDeadline(endDate, endTime);
   const now      = new Date();
 
@@ -47,38 +60,45 @@ export function calcLiveOverdue(endDate, endTime, rentPrice) {
 
   const diffMs        = now.getTime() - deadline.getTime();
   const overdueDays   = Math.floor(diffMs / (24 * 60 * 60 * 1000));
-  const overdueCharges = overdueDays * (parseFloat(rentPrice) || 0);
+  const overdueCharges = overdueDays * (parseFloat(penaltyRate) || 0);
 
   return { overdueDays, overdueCharges, deadline };
 }
 
 /**
- * Append live overdue data to a contract object (mutates in place).
- * For COMPLETED/CANCELLED contracts the stored overdueCharges are used.
+ * Append live overdue / delay-penalty data to a contract object (mutates in place).
+ * For COMPLETED/CANCELLED contracts the stored values are used.
  *
- * @param {object} contract  Prisma RentalContract (must include rentPrice, endDate, endTime)
+ * @param {object} contract  Prisma RentalContract
  * @returns {object} same contract with added fields:
- *   liveOverdueDays, liveOverdueCharges, liveFinalTotal
+ *   liveOverdueDays, liveOverdueCharges, liveDelayPenaltyRate,
+ *   liveTotalDelayPenalty, liveFinalTotal, liveTotalPayable
  */
 export function enrichWithOverdue(contract) {
   const active = contract.status === 'ACTIVE' || contract.status === 'OVERDUE';
+  const penaltyRate = resolvePenaltyRate(contract);
 
   if (active) {
     const { overdueDays, overdueCharges } = calcLiveOverdue(
       contract.endDate,
       contract.endTime,
-      contract.rentPrice,
+      penaltyRate,
     );
-    contract.liveOverdueDays   = overdueDays;
-    contract.liveOverdueCharges = overdueCharges;
+    contract.liveOverdueDays      = overdueDays;
+    contract.liveOverdueCharges   = overdueCharges;
+    contract.liveDelayPenaltyRate = penaltyRate;
+    contract.liveTotalDelayPenalty = overdueCharges;
   } else {
-    // Completed / cancelled — use what was frozen at return time
-    contract.liveOverdueDays    = 0;
-    contract.liveOverdueCharges = contract.overdueCharges || 0;
+    contract.liveOverdueDays      = 0;
+    contract.liveOverdueCharges   = contract.overdueCharges || 0;
+    contract.liveDelayPenaltyRate = contract.delayPenaltyRate || penaltyRate || 0;
+    contract.liveTotalDelayPenalty = contract.totalDelayPenalty ?? contract.overdueCharges ?? 0;
   }
 
-  contract.liveFinalTotal =
-    (parseFloat(contract.totalRent) || 0) + contract.liveOverdueCharges;
+  const baseRent = parseFloat(contract.totalRent) || 0;
+  const penalty  = contract.liveTotalDelayPenalty;
+  contract.liveFinalTotal    = baseRent + penalty;
+  contract.liveTotalPayable  = contract.liveFinalTotal;
 
   return contract;
 }

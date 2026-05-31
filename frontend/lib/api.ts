@@ -119,6 +119,13 @@ export const carOwnersAPI = {
   create: (data: FormData) => api.post('/car-owners', data, { headers: { 'Content-Type': 'multipart/form-data' } }),
   update: (id: string, data: FormData) => api.put(`/car-owners/${id}`, data, { headers: { 'Content-Type': 'multipart/form-data' } }),
   delete: (id: string) => api.delete(`/car-owners/${id}`),
+  getPaymentStats: () => api.get('/car-owners/payment-stats'),
+  getNextReceiptNumber: () => api.get('/car-owners/payments/next-receipt-number'),
+  getPayments: (params?: any) => api.get('/car-owners/payments/all', { params }),
+  getPaymentById: (id: string) => api.get(`/car-owners/payments/${id}`),
+  createPayment: (data: any) => api.post('/car-owners/payments', data),
+  updatePayment: (id: string, data: any) => api.put(`/car-owners/payments/${id}`, data),
+  deletePayment: (id: string) => api.delete(`/car-owners/payments/${id}`),
 };
 
 export const dashboardAPI = {
@@ -151,10 +158,24 @@ export const ownerPortalAPI = {
   getDashboard:              ()                 => ownerApi.get('/owner-portal/dashboard'),
   getCars:                   (params?: any)     => ownerApi.get('/owner-portal/cars', { params }),
   getContracts:              (params?: any)     => ownerApi.get('/owner-portal/contracts', { params }),
+  getPayments:               (params?: any)     => ownerApi.get('/owner-portal/payments', { params }),
   getNotifications:          (params?: any)     => ownerApi.get('/owner-portal/notifications', { params }),
   getUnreadCount:            ()                 => ownerApi.get('/owner-portal/notifications/unread-count'),
   markNotificationRead:      (id: string)       => ownerApi.patch(`/owner-portal/notifications/${id}/read`),
   markAllNotificationsRead:  ()                 => ownerApi.patch('/owner-portal/notifications/read-all'),
+};
+
+export const employeesAPI = {
+  getStats:           ()                     => api.get('/employees/stats'),
+  getAll:             (params?: any)         => api.get('/employees', { params }),
+  getById:            (id: string)           => api.get(`/employees/${id}`),
+  create:             (data: any)            => api.post('/employees', data),
+  update:             (id: string, data: any) => api.put(`/employees/${id}`, data),
+  delete:             (id: string)           => api.delete(`/employees/${id}`),
+  getPayments:        (params?: any)         => api.get('/employees/payments/all', { params }),
+  getPaymentById:     (id: string)           => api.get(`/employees/payments/${id}`),
+  createPayment:      (data: any)            => api.post('/employees/payments', data),
+  deletePayment:      (id: string)           => api.delete(`/employees/payments/${id}`),
 };
 
 export const draftsAPI = {

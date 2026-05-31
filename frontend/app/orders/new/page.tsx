@@ -19,6 +19,7 @@ import toast from 'react-hot-toast';
 interface CarItem {
   id: string; carName: string; model: string; color: string;
   plateNumber: string; dailyRate: number; status: string;
+  carType?: string; images?: { id: string; url: string; order: number }[];
 }
 interface FormErrors { [k: string]: string }
 
@@ -664,10 +665,6 @@ export default function OrderNewPage() {
         plateNumber:    selectedCar?.plateNumber,
         customerName:   customer.fullName,
         customerPhone:  customer.phoneNumber,
-        guarantorName:  guarantor.fullName  || undefined,
-        guarantorPhone: guarantor.phoneNumber || undefined,
-        driverName:     driverName    || undefined,
-        driverPhone:    driverPhone   || undefined,
         notes:          customer.notes || undefined,
         rentalDays,
         dailyRate:      dailyRent,
@@ -826,10 +823,6 @@ export default function OrderNewPage() {
     plateNumber:     selectedCar?.plateNumber,
     customerName:    customer.fullName,
     customerPhone:   customer.phoneNumber,
-    guarantorName:   guarantor.fullName  || undefined,
-    guarantorPhone:  guarantor.phoneNumber || undefined,
-    driverName:      driverName    || undefined,
-    driverPhone:     driverPhone   || undefined,
     notes:           customer.notes || undefined,
     rentalDays,
     dailyRate:       dailyRent,
@@ -990,50 +983,89 @@ export default function OrderNewPage() {
                   <p>{lang === 'dari' ? 'موتری یافت نشد' : 'موتر ونه موندل شو'}</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-h-96 overflow-y-auto pr-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[32rem] overflow-y-auto pr-1">
                   {filteredCars.map(car => {
                     const sel = car.id === selectedCarId;
                     const si  = STATUS_LABEL[car.status] || { text: car.status, cls: 'bg-gray-100 text-gray-600 border-gray-300' };
+                    const thumb = car.images?.[0]?.url ? resolveImgUrl(car.images[0].url) : null;
                     return (
                       <button key={car.id} onClick={() => setSelectedCarId(car.id)}
-                        className={`relative text-right rounded-xl border-2 p-4 transition-all shadow-sm hover:shadow-md
-                          ${sel ? 'border-amber-500 bg-amber-50 shadow-amber-200' : 'border-amber-100 bg-white hover:border-amber-300'}`}>
+                        className={`relative text-right rounded-xl border-2 p-0 overflow-hidden transition-all shadow-sm hover:shadow-lg
+                          ${sel ? 'border-amber-500 bg-amber-50 shadow-amber-200 ring-2 ring-amber-300/40' : 'border-amber-100 bg-white hover:border-amber-300'}`}>
                         {sel && (
-                          <span className="absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center text-white shadow"
+                          <span className="absolute top-2.5 left-2.5 z-10 w-7 h-7 rounded-full flex items-center justify-center text-white shadow-lg"
                             style={{ background: 'linear-gradient(135deg,#f59e0b,#d97706)' }}>
-                            <Check className="w-3.5 h-3.5" />
+                            <Check className="w-4 h-4" />
                           </span>
                         )}
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-3 mx-auto ${sel ? 'bg-amber-100' : 'bg-amber-50'}`}>
-                          <span className="text-2xl">🚗</span>
-                        </div>
-                        <h4 className="font-bold text-amber-900 text-sm mb-1 truncate">{car.carName}</h4>
-                        <div className="flex flex-wrap gap-1 mb-2">
-                          <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">{car.model}</span>
-                          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{car.color}</span>
-                        </div>
-                        <div className="text-xs text-amber-600 font-mono mb-2 bg-amber-50 px-2 py-1 rounded text-center">{car.plateNumber}</div>
-                        <div className="flex items-center justify-between">
-                          <div className="text-sm font-bold text-amber-800">
-                            {formatNumber(car.dailyRate)}
-                            <span className="text-xs font-normal text-amber-500 mr-1">افغانی/روز</span>
+                        {/* Image area */}
+                        <div className="relative w-full h-36 bg-gradient-to-b from-amber-50 to-amber-100/50 overflow-hidden">
+                          {thumb ? (
+                            <img
+                              src={thumb}
+                              alt={car.carName}
+                              className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                                const fallback = (e.target as HTMLImageElement).nextElementSibling as HTMLElement | null;
+                                if (fallback) fallback.style.display = 'flex';
+                              }}
+                            />
+                          ) : null}
+                          <div className={`absolute inset-0 items-center justify-center ${thumb ? 'hidden' : 'flex'}`}
+                            style={{ display: thumb ? 'none' : 'flex' }}>
+                            <Car className="w-14 h-14 text-amber-300" />
                           </div>
-                          <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${si.cls}`}>{si.text}</span>
+                          {/* Gradient overlay at bottom */}
+                          <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-black/20 to-transparent" />
+                        </div>
+                        {/* Content */}
+                        <div className="p-3.5 space-y-2.5">
+                          {/* Name + status row */}
+                          <div className="flex items-center justify-between gap-2">
+                            <h4 className="font-bold text-amber-900 text-sm truncate flex-1">{car.carName}</h4>
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium shrink-0 ${si.cls}`}>{si.text}</span>
+                          </div>
+                          {/* Type + model + color */}
+                          <div className="flex flex-wrap gap-1.5">
+                            {car.carType && (
+                              <span className="text-[11px] font-semibold bg-amber-200/70 text-amber-800 px-2 py-0.5 rounded-full">
+                                {car.carType}
+                              </span>
+                            )}
+                            <span className="text-[11px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">{car.model}</span>
+                            <span className="text-[11px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{car.color}</span>
+                          </div>
+                          {/* Plate + rate row */}
+                          <div className="flex items-center justify-between">
+                            <div className="text-xs text-amber-600 font-mono bg-amber-50 px-2 py-1 rounded truncate max-w-[140px]">{car.plateNumber}</div>
+                          </div>
                         </div>
                       </button>
                     );
                   })}
                 </div>
               )}
-              {selectedCar && (
+              {selectedCar && (() => {
+                const selThumb = selectedCar.images?.[0]?.url ? resolveImgUrl(selectedCar.images[0].url) : null;
+                return (
                 <div className="flex items-center gap-4 p-4 rounded-xl bg-green-50 border-2 border-green-200">
-                  <CheckCircle2 className="w-6 h-6 text-green-600 shrink-0" />
-                  <div className="flex-1">
-                    <p className="font-bold text-green-800">{lang === 'dari' ? 'موتر انتخاب شد:' : 'موتر وټاکل شو:'} {selectedCar.carName}</p>
-                    <p className="text-sm text-green-600">{selectedCar.model} — {selectedCar.plateNumber} — {formatNumber(selectedCar.dailyRate)} افغانی/روز</p>
+                  <CheckCircle2 className="w-6 h-6 text-green-600 shrink-0 mt-0.5" />
+                  {selThumb && (
+                    <img src={selThumb} alt={selectedCar.carName} className="w-14 h-14 rounded-lg object-cover border-2 border-green-300 shrink-0" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-bold text-green-800">{lang === 'dari' ? 'موتر انتخاب شد:' : 'موتر وټاکل شو:'} {selectedCar.carName}</p>
+                      {selectedCar.carType && (
+                        <span className="text-[10px] font-semibold bg-green-200 text-green-800 px-2 py-0.5 rounded-full">{selectedCar.carType}</span>
+                      )}
+                    </div>
+                    <p className="text-sm text-green-600 truncate">{selectedCar.model} — {selectedCar.color} — {selectedCar.plateNumber}</p>
                   </div>
                 </div>
-              )}
+                );
+              })()}
             </div>
           )}
 
@@ -1154,11 +1186,7 @@ export default function OrderNewPage() {
           {step === 3 && (
             <div className="space-y-5">
               <StepHeader icon={UserCheck} title={lang === 'dari' ? 'معلومات راننده (اختیاری)' : 'د دریور معلومات (اختیاري)'} gradient="linear-gradient(135deg,#0891b2,#0e7490)" />
-              <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 text-sm text-blue-700">
-                {lang === 'dari'
-                  ? 'اگر موتر توسط راننده جداگانه‌ای استفاده می‌شود، معلومات راننده را وارد کنید. در غیر این صورت می‌توانید این مرحله را رد کنید.'
-                  : 'که موتر د جلا دریور لخوا کارول کیږي، د دریور معلومات دننه کړئ. نه د دې خو تاسو کولی شئ دا مرحله رد کړئ.'}
-              </div>
+              
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <Field label={lang === 'dari' ? 'نام راننده' : 'د دریور نوم'}>
                   <input
@@ -1234,7 +1262,7 @@ export default function OrderNewPage() {
 
                 {/* Advance payment */}
                 <div>
-                  <label className={lbl}>{lang === 'dari' ? 'پیش پرداخت دریافتی (افغانی)' : 'ترلاسه شوی پیش پرداخت (افغاني)'}</label>
+                  <label className={lbl}>{lang === 'dari' ? 'پیش پرداخت  (افغانی)' : '  پیش پرداخت (افغاني)'}</label>
                   <input
                     value={receivedAmount}
                     onChange={numericInputHandler(setReceivedAmount)}

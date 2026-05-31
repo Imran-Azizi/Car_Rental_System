@@ -24,6 +24,11 @@ export interface BillData {
   driverName?: string; driverLicense?: string; driverPhone?: string;
   customerSignature?: string; guarantorSignature?: string;
   managerSignature?: string; notes?: string;
+  // Delay penalty fields
+  delayDays?: number;
+  delayPenaltyRate?: number | string;
+  totalDelayPenalty?: number | string;
+  finalTotal?: number | string;
 }
 
 interface ContractBillProps {
@@ -56,7 +61,7 @@ const T = {
       'مسئولیت هر گونه حادثه با مشتری می‌باشد.',
       'مسئولیت هر نوع فعالیت غیرقانونی با موتر (مانند قاچاق و غیره) با مشتری است.',
       'در صورت توقیف یا حادثه موتر به علت مشتری، کرایه روزانه همچنان تعلق می‌گیرد.',
-      'در صورت تأخیر در برگشت موتر، به ازای هر ساعت (___) افغانی دریافت می‌شود.',
+      'در صورت تأخیر در برگشت موتر، به ازای هر روز جریمه تأخیر طبق نرخ تعیین‌شده دریافت می‌شود.',
       'در صورت تصادف یا برخورد یا آسیب، خسارت کامل پرداخت می‌شود.',
       'موتر باید در همان حالتی که تحویل گرفته شده، به دفتر برگشت داده شود. موتر سالم، درست و بدون هیچ مشکلی تحویل داده شد.',
       'برای نظافت (___) افغانی اضافی دریافت می‌شود.',
@@ -71,6 +76,12 @@ const T = {
     printBtn:   'چاپ بل',
     closeBtn:   'بستن',
     currency:   'افغانی',
+    // Delay labels
+    delayLabel: 'تأخیر',
+    delayDaysLabel: 'روز تأخیر',
+    delayRateLabel: 'نرخ جریمه روزانه',
+    delayPenaltyLabel: 'مجموع جریمه تأخیر',
+    finalTotalLabel: 'مجموع نهایی (اصلی + جریمه)',
   },
   pashto: {
     companyName:     'افشار د کرایپی موترو او ګلسازی مرکز',
@@ -93,7 +104,7 @@ const T = {
       'د هری حادثي ضمور مشتری دی.',
       'موتر کي د غیر قانوني کار مسؤلیت به مشتری باندی دی لکه (قاچاق او نور...).',
       'موتر د مشتري له وجی د بندی کیدو یا حادثه به صورت کي د هری ورځي کرایه به مشتری باندی ده.',
-      'موتر به خپل وخت د نه حاضریدو به صورت کي فی ساعت (___) افغانی اخیستل کیږی.',
+      'د موتر په وخت نه راستنیدو صورت کې د جریمې ورځنی نرخ پلي کیږي.',
       'د بکر یا ټکر یا جیه کیدو به صورت به هم جوری او قیمت کمیدو تاوان به هم ور کوی.',
       'موتر مو چی به کوم حالت کي در سپارلی برته باید به هماغه حالت کي دفتر ته تسلیم کوی. موټر روغ، جوړ او بې له کومې ستونزې تسلیم شو.',
       'د کلبوس به صورت کي (___) افغانی اضافه ورکوی.',
@@ -108,6 +119,12 @@ const T = {
     printBtn:   'چاپ بل',
     closeBtn:   'بستن',
     currency:   'افغانی',
+    // Delay labels
+    delayLabel: 'ځنډ',
+    delayDaysLabel: 'د ځنډ ورځې',
+    delayRateLabel: 'د جریمې ورځنی نرخ',
+    delayPenaltyLabel: 'د ځنډ ټوله جریمه',
+    finalTotalLabel: 'وروستی ټول (اصلي + جریمه)',
   },
 } as const;
 
@@ -161,6 +178,9 @@ export default function ContractBill({ data, lang = 'pashto', onClose, autoPrint
     { carVal: `${fmt(data.totalRent)} ${tr.currency}`,  rentVal: data.customerCurrentAddress || '', guarVal: data.guarantorCurrentAddress || '', driverVal: '' },
     { carVal: `${fmt(data.advancePayment)} / ${fmt(data.remainingAmount)} ${tr.currency}`, rentVal: data.customerTazkira || '', guarVal: data.guarantorTazkira || '', driverVal: '' },
   ];
+
+  const hasDelay = (Number(data.delayDays) ?? 0) > 0 || (Number(data.totalDelayPenalty) ?? 0) > 0;
+  const displayTotal = data.finalTotal ?? data.totalRent;
 
   const pNum = ['۱','۲','۳','۴','۵','۶','۷','۸'];
 
@@ -350,6 +370,46 @@ export default function ContractBill({ data, lang = 'pashto', onClose, autoPrint
               ))}
             </tbody>
           </table>
+
+          {/* ══ DELAY PENALTY SECTION ══ */}
+          {hasDelay && (
+            <div style={{
+              border: '2px solid #dc2626', marginBottom: '3px', background: '#fef2f2',
+              direction: 'rtl', overflow: 'hidden',
+            }}>
+              <div style={{
+                background: 'linear-gradient(135deg,#dc2626,#b91c1c)',
+                padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '6px',
+              }}>
+                <span style={{ fontWeight: '900', fontSize: '11pt', color: '#fff' }}>
+                  ⚠ {tr.delayLabel}
+                </span>
+              </div>
+              <div style={{
+                display: 'flex', flexDirection: 'row', gap: '0',
+                borderTop: '1px solid #fca5a5',
+              }}>
+                {[
+                  { label: tr.delayDaysLabel, value: `${data.delayDays || 0} ${lang === 'dari' ? 'روز' : 'ورځ'}`, color: '#dc2626' },
+                  { label: tr.delayRateLabel, value: `${fmt(data.delayPenaltyRate || data.dailyRate)} ${tr.currency}`, color: '#ea580c' },
+                  { label: tr.delayPenaltyLabel, value: `${fmt(data.totalDelayPenalty || 0)} ${tr.currency}`, color: '#dc2626' },
+                  { label: tr.finalTotalLabel, value: `${fmt(displayTotal)} ${tr.currency}`, color: '#991b1b' },
+                ].map((item, idx, arr) => (
+                  <div key={item.label} style={{
+                    flex: 1, padding: '8px 6px', textAlign: 'center',
+                    borderLeft: idx < arr.length - 1 ? '1px solid #fca5a5' : 'none',
+                  }}>
+                    <div style={{ fontSize: '7.5pt', color: '#6b7280', marginBottom: '3px', fontWeight: 'bold' }}>
+                      {item.label}
+                    </div>
+                    <div style={{ fontSize: '10pt', fontWeight: '900', color: item.color }}>
+                      {item.value}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* ══ CONDITIONS SECTION ══ */}
           <div style={{ border: '2px solid #8B4513', marginBottom: '3px', background: '#FEFDF5', direction: 'rtl' }}>

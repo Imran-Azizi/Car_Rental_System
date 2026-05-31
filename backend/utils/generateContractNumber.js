@@ -1,8 +1,6 @@
-export function generateContractNumber() {
-  const date = new Date();
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const random = Math.floor(Math.random() * 9000) + 1000;
-  return `ACR-${year}${month}${day}-${random}`;
+import prisma from './prisma.js';
+
+export async function generateContractNumber() {
+  const result = await prisma.$queryRaw`SELECT nextval('contract_number_seq')::int AS seq`;
+  return String(result[0].seq);
 }

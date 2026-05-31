@@ -14,10 +14,7 @@ export interface CustomerBillData {
   plateNumber?: string;
   customerName: string;
   customerPhone?: string;
-  guarantorName?: string;
-  guarantorPhone?: string;
-  driverName?: string;
-  driverPhone?: string;
+
   notes?: string;
   rentalDays: number;
   dailyRate: number | string;
@@ -25,6 +22,11 @@ export interface CustomerBillData {
   received: number | string;
   remaining: number | string;
   lang?: "dari" | "pashto";
+  // Delay penalty fields
+  delayDays?: number;
+  delayPenaltyRate?: number | string;
+  totalDelayPenalty?: number | string;
+  finalTotal?: number | string;
 }
 
 interface Props {
@@ -47,8 +49,6 @@ const T = {
     phone: "تلیفون",
     startDate: "تاریخ تحویل",
     endDate: "تاریخ برگشت",
-    guarantor: "ضامن",
-    driver: "راننده",
     colNo: "شماره",
     colDetails: "تفصیلات",
     colQty: "تعداد",
@@ -57,10 +57,13 @@ const T = {
     rowTotal: "مجموعه",
     rowReceived: "رسید",
     rowRemain: "باقی",
+    rowDelayPenalty: "جریمه تأخیر",
+    rowFinalTotal: "مجموع نهایی",
     signature: "امضاء",
     currency: "افغانی",
     days: "روز",
     rentalItem: "کرایه موتر",
+    delayItem: "جریمه تأخیر",
     printBtn: "چاپ بل مشتری",
     closeBtn: "بستن",
   },
@@ -75,8 +78,6 @@ const T = {
     phone: "تلیفون",
     startDate: "د ورلو نیټه",
     endDate: "د راستون نیټه",
-    guarantor: "ضامن",
-    driver: "دریور",
     colNo: "شمیره",
     colDetails: "تفصیلات",
     colQty: "شمیر",
@@ -85,10 +86,13 @@ const T = {
     rowTotal: "مجموعه",
     rowReceived: "رسید",
     rowRemain: "باقی",
+    rowDelayPenalty: "د ځنډ جریمه",
+    rowFinalTotal: "وروستی ټول",
     signature: "لاسلیک",
     currency: "افغاني",
     days: "ورځ",
     rentalItem: "د موتر کرایه",
+    delayItem: "د ځنډ جریمه",
     printBtn: "د مشتري بل چاپ",
     closeBtn: "بستن",
   },
@@ -128,6 +132,13 @@ export default function CustomerBill({
     ? data.notes.trim()
     : `${tr.rentalItem}: ${data.carType}${data.plateNumber ? ` (${data.plateNumber})` : ""}`;
 
+  const hasDelay = (Number(data.delayDays) ?? 0) > 0 || (Number(data.totalDelayPenalty) ?? 0) > 0;
+  const delayPenalty = Number(data.totalDelayPenalty || 0);
+  const displayTotal = Number(data.finalTotal ?? data.totalRent);
+  const displayRemaining = hasDelay
+    ? Math.max(0, displayTotal - Number(data.received || 0))
+    : Number(data.remaining || 0);
+
   const TABLE_ROWS = 6;
 
   /* ── summary data ── */
@@ -138,6 +149,22 @@ export default function CustomerBill({
       bg: BLUE_LIGHT,
       color: BLUE_DARK,
     },
+    ...(hasDelay
+      ? [
+          {
+            label: tr.rowDelayPenalty,
+            value: `${fmt(delayPenalty)} ${tr.currency}`,
+            bg: "#fef2f2",
+            color: "#dc2626",
+          },
+        ]
+      : []),
+    {
+      label: tr.rowFinalTotal,
+      value: `${fmt(displayTotal)} ${tr.currency}`,
+      bg: "#fee2e2",
+      color: "#991b1b",
+    },
     {
       label: tr.rowReceived,
       value: `${fmt(data.received)}  ${tr.currency}`,
@@ -146,7 +173,7 @@ export default function CustomerBill({
     },
     {
       label: tr.rowRemain,
-      value: `${fmt(data.remaining)} ${tr.currency}`,
+      value: `${fmt(displayRemaining)} ${tr.currency}`,
       bg: "#fee2e2",
       color: "#b91c1c",
     },
@@ -182,24 +209,6 @@ export default function CustomerBill({
         ltr: true,
       },
     ],
-    ...(data.guarantorName || data.driverName
-      ? [
-          [
-            {
-              label: tr.guarantor,
-              value: data.guarantorName
-                ? `${data.guarantorName}${data.guarantorPhone ? "  " + data.guarantorPhone : ""}`
-                : "—",
-            },
-            {
-              label: tr.driver,
-              value: data.driverName
-                ? `${data.driverName}${data.driverPhone ? "  " + data.driverPhone : ""}`
-                : "—",
-            },
-          ],
-        ]
-      : []),
   ];
 
   return (
@@ -582,6 +591,24 @@ export default function CustomerBill({
                 bg: BLUE_LIGHT,
                 color: BLUE_DARK,
               },
+              ...(hasDelay
+                ? [
+                    {
+                      label: tr.rowDelayPenalty,
+                      value: fmt(delayPenalty),
+                      currency: tr.currency,
+                      bg: "#fef2f2",
+                      color: "#dc2626",
+                    },
+                  ]
+                : []),
+              {
+                label: tr.rowFinalTotal,
+                value: fmt(displayTotal),
+                currency: tr.currency,
+                bg: "#fee2e2",
+                color: "#991b1b",
+              },
               {
                 label: tr.rowReceived,
                 value: fmt(data.received),
@@ -591,7 +618,7 @@ export default function CustomerBill({
               },
               {
                 label: tr.rowRemain,
-                value: fmt(data.remaining),
+                value: fmt(displayRemaining),
                 currency: tr.currency,
                 bg: "#fee2e2",
                 color: "#b91c1c",

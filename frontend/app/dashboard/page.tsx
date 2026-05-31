@@ -10,7 +10,7 @@ import {
   Car, Users, FileText, CheckCircle, Clock, TrendingUp, TrendingDown,
   ChevronLeft, ListOrdered, Wallet, BadgeCheck, Hourglass,
   UserCheck, ShieldCheck, Plus, ArrowUpRight, Activity,
-  BarChart3, AlertCircle, Banknote, Receipt,
+  BarChart3, AlertCircle, Banknote, Receipt, AlertTriangle,
 } from 'lucide-react';
 import { formatAfghanDate, formatCurrency as fmtCur, formatNumber } from '@/lib/utils';
 
@@ -140,7 +140,7 @@ export default function DashboardPage() {
         {/* ══════════════════════════════════════════
             ROW 1 — FINANCIAL OVERVIEW (4 cards)
         ══════════════════════════════════════════ */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
 
           {/* Net income */}
           <div className="card-golden rounded-2xl overflow-hidden">
@@ -222,6 +222,32 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          {/* Paid to car owners */}
+          <div className="card-golden rounded-2xl overflow-hidden">
+            <div className="h-1 w-full" style={{ background: 'linear-gradient(90deg,#0891b2,#06b6d4)' }} />
+            <div className="p-5">
+              <div className="flex items-start justify-between mb-4">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-sm shrink-0"
+                  style={{ background: 'linear-gradient(135deg,#0891b2,#0e7490)' }}>
+                  <Banknote className="w-5 h-5 text-white" />
+                </div>
+                <span className="text-xs font-black px-2 py-0.5 rounded-full"
+                  style={{ background: '#cffafe', color: '#155e75' }}>
+                  {formatNumber(stats?.totalCarOwnerPaymentsCount || 0)}
+                </span>
+              </div>
+              <p className="text-2xl font-black text-cyan-900 leading-tight">
+                {fc(stats?.totalCarOwnerPaid ?? 0)}
+              </p>
+              <p className="text-xs text-gray-500 mt-1.5 font-medium">
+                پول داده شده برای صاحبان موتر
+              </p>
+              <p className="text-xs text-cyan-500 mt-0.5">
+                باقی سهم صاحبان: {fc(stats?.ownerOutstanding ?? 0)}
+              </p>
+            </div>
+          </div>
+
           {/* Expense deductions */}
           <div className="card-golden rounded-2xl overflow-hidden">
             <div className="h-1 w-full" style={{ background: 'linear-gradient(90deg,#ef4444,#f87171)' }} />
@@ -245,6 +271,32 @@ export default function DashboardPage() {
               <p className="text-xs text-red-400 mt-0.5">{d('سهم ادمین از مصارف', 'د ادمین د لګښتونو برخه')}</p>
             </div>
           </div>
+
+          {/* Delay Penalty Total */}
+          {(stats?.totalDelayPenalty ?? 0) > 0 && (
+            <div className="card-golden rounded-2xl overflow-hidden">
+              <div className="h-1 w-full" style={{ background: 'linear-gradient(90deg,#f97316,#ea580c)' }} />
+              <div className="p-5">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-sm shrink-0"
+                    style={{ background: 'linear-gradient(135deg,#f97316,#c2410c)' }}>
+                    <AlertTriangle className="w-5 h-5 text-white" />
+                  </div>
+                  <span className="text-xs font-black px-2 py-0.5 rounded-full animate-pulse"
+                    style={{ background: '#ffedd5', color: '#9a3412' }}>
+                    {d('تاخیر', 'ځنډ')}
+                  </span>
+                </div>
+                <p className="text-2xl font-black text-orange-900 leading-tight">
+                  {fc(stats?.totalDelayPenalty ?? 0)}
+                </p>
+                <p className="text-xs text-gray-500 mt-1.5 font-medium">
+                  {d('مجموع جریمه تأخیر', 'د ځنډ ټوله جریمه')}
+                </p>
+                <p className="text-xs text-orange-400 mt-0.5">{d('شامل در مجموع کرایه', 'په ټوله کرایه کې شامله')}</p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ══════════════════════════════════════════
@@ -263,8 +315,8 @@ export default function DashboardPage() {
             },
             {
               label: d('مجموع کرایه', 'ټوله کرایه'),
-              value: fc(stats?.totalContractValue),
-              sub:   d('مجموع ارزش سفارش‌ها', 'د ټولو سفارشونو ارزښت'),
+              value: fc((stats?.totalContractValue ?? 0) + (stats?.totalDelayPenalty ?? 0)),
+              sub:   d('مجموع ارزش سفارش‌ها + جریمه', 'د ټولو سفارشونو ارزښت + جریمه'),
               icon:  Receipt,
               grad:  'linear-gradient(135deg,#0891b2,#0e7490)',
               bg:    '#e0f2fe',
@@ -312,7 +364,7 @@ export default function DashboardPage() {
 
           {/* Car Fleet Panel */}
           <div className="card-golden rounded-2xl p-5 space-y-4">
-            <SectionHead title={d('وضعیت ناوگان', 'د موترونو حالت')} icon={Car} color="linear-gradient(135deg,#f59e0b,#d97706)" link="/cars" linkLabel={d('موترها', 'موترونه')} />
+            <SectionHead title={d('وضعیت موترها', 'د موترونو حالت')} icon={Car} color="linear-gradient(135deg,#f59e0b,#d97706)" link="/cars" linkLabel={d('موترها', 'موترونه')} />
             <div className="flex items-center justify-center gap-4 py-2">
               {/* Donut visual */}
               <div className="relative w-24 h-24 shrink-0">
@@ -480,34 +532,55 @@ export default function DashboardPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-amber-50">
-                      {pendingList.map((c: any, i: number) => (
-                        <tr key={c.id} className="hover:bg-amber-50/50 transition-colors">
-                          <td className="px-3 py-3 text-xs text-gray-400 font-mono">{i + 1}</td>
-                          <td className="px-3 py-3">
-                            <div>
-                              <p className="text-sm font-semibold text-gray-800">{c.customer?.fullName}</p>
-                              <p className="text-xs text-gray-400 font-mono">{c.contractNumber}</p>
-                            </div>
-                          </td>
-                          <td className="px-3 py-3">
-                            <p className="text-sm text-gray-700">{c.car?.carName}</p>
-                            <p className="text-xs text-gray-400">{c.car?.plateNumber}</p>
-                          </td>
-                          <td className="px-3 py-3 text-xs text-gray-500">{formatAfghanDate(c.endDate)}</td>
-                          <td className="px-3 py-3">
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-sm font-bold bg-red-50 text-red-700 border border-red-100">
-                              {fc(c.remainingAmount)}
-                            </span>
-                          </td>
-                          <td className="px-3 py-3">
-                            <Link href="/orders"
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 transition-colors">
-                              <ArrowUpRight className="w-3 h-3" />
-                              {d('مشاهده', 'کتل')}
-                            </Link>
-                          </td>
-                        </tr>
-                      ))}
+              {pendingList.map((c: any, i: number) => {
+                const isOverdue = c.status === 'OVERDUE';
+                const overdueDays = c.liveOverdueDays ?? 0;
+                const overdueCharge = c.liveOverdueCharges ?? c.liveTotalDelayPenalty ?? 0;
+                const finalTotal = c.liveFinalTotal ?? c.totalRent;
+                return (
+                <tr key={c.id} className={`hover:bg-amber-50/50 transition-colors ${isOverdue ? 'bg-red-50/30' : ''}`}>
+                  <td className="px-3 py-3 text-xs text-gray-400 font-mono">{i + 1}</td>
+                  <td className="px-3 py-3">
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-sm font-semibold text-gray-800">{c.customer?.fullName}</p>
+                        {isOverdue && <AlertTriangle className="w-3.5 h-3.5 text-red-500 shrink-0" />}
+                      </div>
+                      <p className="text-xs text-gray-400 font-mono">{c.contractNumber}</p>
+                    </div>
+                  </td>
+                  <td className="px-3 py-3">
+                    <p className="text-sm text-gray-700">{c.car?.carName}</p>
+                    <p className="text-xs text-gray-400">{c.car?.plateNumber}</p>
+                  </td>
+                  <td className="px-3 py-3 text-xs text-gray-500">
+                    {formatAfghanDate(c.endDate)}
+                    {isOverdue && overdueDays > 0 && (
+                      <div className="text-xs font-bold text-red-600 mt-0.5">+{overdueDays} {d('روز', 'ورځ')}</div>
+                    )}
+                  </td>
+                  <td className="px-3 py-3">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-sm font-bold bg-red-50 text-red-700 border border-red-100">
+                        {fc(c.remainingAmount)}
+                      </span>
+                      {isOverdue && overdueCharge > 0 && (
+                        <span className="text-[10px] font-bold text-red-800 bg-red-100 px-1.5 py-0.5 rounded">
+                          {d('نهایی:', 'وروستی:')} {fc(finalTotal)}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-3 py-3">
+                    <Link href="/orders"
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 transition-colors">
+                      <ArrowUpRight className="w-3 h-3" />
+                      {d('مشاهده', 'کتل')}
+                    </Link>
+                  </td>
+                </tr>
+                );
+              })}
                     </tbody>
                   </table>
                 </div>
@@ -600,12 +673,16 @@ export default function DashboardPage() {
                 <tbody className="divide-y divide-amber-50">
                   {stats.recentContracts.map((c: any, i: number) => {
                     const s = statusMap[c.status];
+                    const isOverdue = c.status === 'OVERDUE';
                     return (
-                      <tr key={c.id} className="hover:bg-amber-50/40 transition-colors">
+                      <tr key={c.id} className={`hover:bg-amber-50/40 transition-colors ${isOverdue ? 'bg-red-50/20' : ''}`}>
                         <td className="px-4 py-3.5">
-                          <span className="font-mono text-xs bg-amber-50 text-amber-700 px-2 py-1 rounded border border-amber-100 whitespace-nowrap">
-                            {c.contractNumber}
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono text-xs bg-amber-50 text-amber-700 px-2 py-1 rounded border border-amber-100 whitespace-nowrap">
+                              {c.contractNumber}
+                            </span>
+                            {isOverdue && <AlertTriangle className="w-3.5 h-3.5 text-red-500 shrink-0" />}
+                          </div>
                         </td>
                         <td className="px-4 py-3.5">
                           <div className="flex items-center gap-2.5">
@@ -627,7 +704,14 @@ export default function DashboardPage() {
                           {formatAfghanDate(c.startDate)}
                         </td>
                         <td className="px-4 py-3.5">
-                          <span className="text-sm font-bold text-amber-900">{fc(c.totalRent)}</span>
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-sm font-bold text-amber-900">{fc(c.totalRent)}</span>
+                            {isOverdue && (c.liveOverdueCharges ?? c.liveTotalDelayPenalty ?? 0) > 0 && (
+                              <span className="text-[10px] font-bold text-red-600">
+                                +{fc(c.liveOverdueCharges ?? c.liveTotalDelayPenalty ?? 0)} {d('جریمه', 'جریمه')}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-3.5">
                           <span className={`text-sm font-bold ${c.remainingAmount > 0 ? 'text-red-600' : 'text-emerald-600'}`}>

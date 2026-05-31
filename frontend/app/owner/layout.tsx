@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import {
   LayoutDashboard, Car, FileText, LogOut,
-  Menu, X, ChevronLeft, Bell, Phone, UserCheck,
+  Menu, X, ChevronLeft, Bell, Phone, UserCheck, Banknote,
 } from 'lucide-react';
 import { ownerAuthAPI, ownerPortalAPI } from '@/lib/api';
 import { resolveImgUrl } from '@/lib/imageUrl';
@@ -16,6 +16,7 @@ const navItems = [
   { href: '/owner/dashboard',     dari: 'داشبورد',    pashto: 'ډاشبورډ',    icon: LayoutDashboard },
   { href: '/owner/cars',          dari: 'موترهای من', pashto: 'زما موترونه', icon: Car },
   { href: '/owner/contracts',     dari: 'قراردادها',  pashto: 'قراردادونه',  icon: FileText },
+  { href: '/owner/payments',      dari: 'پول داده شده', pashto: 'ورکړل شوې پیسې', icon: Banknote },
   { href: '/owner/notifications', dari: 'اعلان‌ها',   pashto: 'خبرتیاوې',    icon: Bell },
 ];
 

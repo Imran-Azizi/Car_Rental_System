@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useApp } from '@/lib/context';
 import {
   LayoutDashboard, Car, FileText, LogOut, X,
-  ClipboardList, UserCheck, Wallet, Phone, ShieldCheck,
+  ClipboardList, UserCheck, Wallet, Phone, ShieldCheck, Users,
 } from 'lucide-react';
 
 const navItems = [
@@ -15,6 +15,7 @@ const navItems = [
   { key: 'carOwners', icon: UserCheck,       href: '/car-owners', prefix: '/car-owners' },
   { key: 'cars',      icon: Car,             href: '/cars',       prefix: '/cars' },
   { key: 'expenses',  icon: Wallet,          href: '/expenses',   prefix: '/expenses' },
+  { key: 'employees', icon: Users,           href: '/employees',  prefix: '/employees' },
 ] as const;
 
 export const SIDEBAR_W = 'w-72'; /* 288 px */

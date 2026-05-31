@@ -4,6 +4,7 @@ import {
   getOwnerDashboard,
   getOwnerCars,
   getOwnerContracts,
+  getOwnerPayments,
   getOwnerNotifications,
   getUnreadNotificationCount,
   markNotificationRead,
@@ -16,6 +17,7 @@ router.use(authenticateOwner);
 router.get('/dashboard',  getOwnerDashboard);
 router.get('/cars',       getOwnerCars);
 router.get('/contracts',  getOwnerContracts);
+router.get('/payments',   getOwnerPayments);
 
 // Notifications
 router.get('/notifications',               getOwnerNotifications);
