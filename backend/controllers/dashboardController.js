@@ -1,10 +1,15 @@
-import prisma from '../utils/prisma.js';
-import { sendSuccess, sendError } from '../utils/response.js';
+import prisma from "../utils/prisma.js";
+import { sendSuccess, sendError } from "../utils/response.js";
+import {
+  getKabulDateTimeParts,
+  getKabulMonthRangeForDate,
+  addKabulMonths,
+} from "../utils/dateUtils.js";
 
 export const getDashboardStats = async (req, res) => {
   try {
-    const sixMonthsAgo = new Date();
-    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    const currentMonth = getKabulMonthRangeForDate();
+    const sixMonthsAgo = addKabulMonths(currentMonth.start, -6);
 
     const [
       totalCars,
@@ -34,13 +39,13 @@ export const getDashboardStats = async (req, res) => {
       liveActiveContracts,
     ] = await Promise.all([
       prisma.car.count(),
-      prisma.car.count({ where: { status: 'AVAILABLE' } }),
-      prisma.car.count({ where: { status: 'RENTED' } }),
-      prisma.car.count({ where: { status: 'MAINTENANCE' } }),
+      prisma.car.count({ where: { status: "AVAILABLE" } }),
+      prisma.car.count({ where: { status: "RENTED" } }),
+      prisma.car.count({ where: { status: "MAINTENANCE" } }),
       prisma.customer.count(),
-      prisma.rentalContract.count({ where: { status: 'ACTIVE' } }),
-      prisma.rentalContract.count({ where: { status: 'COMPLETED' } }),
-      prisma.rentalContract.count({ where: { status: 'OVERDUE' } }),
+      prisma.rentalContract.count({ where: { status: "ACTIVE" } }),
+      prisma.rentalContract.count({ where: { status: "COMPLETED" } }),
+      prisma.rentalContract.count({ where: { status: "OVERDUE" } }),
       prisma.rentalContract.count(),
       prisma.payment.findMany({
         where: { paymentDate: { gte: sixMonthsAgo } },
@@ -48,39 +53,57 @@ export const getDashboardStats = async (req, res) => {
       }),
       prisma.rentalContract.aggregate({
         _sum: { remainingAmount: true },
-        where: { status: { in: ['ACTIVE', 'OVERDUE'] } },
+        where: { status: { in: ["ACTIVE", "OVERDUE"] } },
       }),
       prisma.rentalContract.aggregate({ _sum: { totalRent: true } }),
       prisma.payment.aggregate({ _sum: { amount: true } }),
       prisma.rentalContract.aggregate({ _sum: { ownerShare: true } }),
       prisma.rentalContract.aggregate({ _sum: { adminShare: true } }),
-      prisma.rentalContract.aggregate({ _sum: { ownerShare: true }, where: { status: 'COMPLETED' } }),
-      prisma.rentalContract.aggregate({ _sum: { adminShare: true }, where: { status: 'COMPLETED' } }),
+      prisma.rentalContract.aggregate({
+        _sum: { ownerShare: true },
+        where: { status: "COMPLETED" },
+      }),
+      prisma.rentalContract.aggregate({
+        _sum: { adminShare: true },
+        where: { status: "COMPLETED" },
+      }),
       prisma.rentalContract.findMany({
         take: 8,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         include: {
-          car:      { select: { carName: true, plateNumber: true, model: true } },
+          car: { select: { carName: true, plateNumber: true, model: true } },
           customer: { select: { fullName: true, phoneNumber: true } },
         },
       }),
       prisma.rentalContract.findMany({
-        where: { status: { in: ['ACTIVE', 'OVERDUE'] }, remainingAmount: { gt: 0 } },
-        orderBy: { remainingAmount: 'desc' },
+        where: {
+          status: { in: ["ACTIVE", "OVERDUE"] },
+          remainingAmount: { gt: 0 },
+        },
+        orderBy: { remainingAmount: "desc" },
         take: 20,
         select: {
-          id: true, contractNumber: true, remainingAmount: true,
-          totalRent: true, totalDelayPenalty: true, status: true, endDate: true,
-          endTime: true, rentPrice: true, delayPenaltyRate: true,
+          id: true,
+          contractNumber: true,
+          remainingAmount: true,
+          totalRent: true,
+          totalDelayPenalty: true,
+          status: true,
+          endDate: true,
+          endTime: true,
+          rentPrice: true,
+          delayPenaltyRate: true,
           customer: { select: { fullName: true, phoneNumber: true } },
-          car:      { select: { carName: true, plateNumber: true } },
+          car: { select: { carName: true, plateNumber: true } },
         },
       }),
       prisma.payment.findMany({
         take: 10,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         select: {
-          id: true, amount: true, paymentDate: true,
+          id: true,
+          amount: true,
+          paymentDate: true,
           rentalContract: {
             select: {
               contractNumber: true,
@@ -89,71 +112,95 @@ export const getDashboardStats = async (req, res) => {
           },
         },
       }),
-      prisma.expense.aggregate({ _sum: { adminShare: true, ownerShare: true, amount: true } }),
+      prisma.expense.aggregate({
+        _sum: { adminShare: true, ownerShare: true, amount: true },
+      }),
       prisma.salaryPayment.aggregate({ _sum: { amount: true }, _count: true }),
-      prisma.carOwnerPayment.aggregate({ _sum: { amount: true }, _count: true }),
+      prisma.carOwnerPayment.aggregate({
+        _sum: { amount: true },
+        _count: true,
+      }),
       prisma.rentalContract.aggregate({ _sum: { totalDelayPenalty: true } }),
       prisma.rentalContract.findMany({
-        where: { status: { in: ['ACTIVE', 'OVERDUE'] } },
+        where: { status: { in: ["ACTIVE", "OVERDUE"] } },
         select: {
-          id: true, status: true, endDate: true, endTime: true,
-          rentPrice: true, delayPenaltyRate: true, totalRent: true,
-          totalDelayPenalty: true, remainingAmount: true,
+          id: true,
+          status: true,
+          endDate: true,
+          endTime: true,
+          rentPrice: true,
+          delayPenaltyRate: true,
+          totalRent: true,
+          totalDelayPenalty: true,
+          remainingAmount: true,
         },
       }),
     ]);
 
-    const totalContractValue   = totalContractValueAgg._sum.totalRent      || 0;
-    const pendingPayments      = pendingPaymentsAgg._sum.remainingAmount    || 0;
-    const totalReceived        = totalReceivedAgg._sum.amount               || 0;
-    const ownerIncome          = ownerShareAllAgg._sum.ownerShare           || 0;
-    const adminIncome          = adminShareAllAgg._sum.adminShare           || 0;
-    const ownerIncomeCompleted = ownerShareCompletedAgg._sum.ownerShare     || 0;
-    const adminIncomeCompleted = adminShareCompletedAgg._sum.adminShare     || 0;
-    const totalExpenses        = expenseSplitsAgg._sum.amount               || 0;
-    const adminExpenses        = expenseSplitsAgg._sum.adminShare           || 0;
-    const ownerExpenses        = expenseSplitsAgg._sum.ownerShare           || 0;
-    const totalSalaryPaid      = salaryPaymentsAgg._sum.amount              || 0;
-    const totalSalaryCount     = salaryPaymentsAgg._count                   || 0;
-    const totalCarOwnerPaid    = carOwnerPaymentsAgg._sum.amount            || 0;
-    const totalCarOwnerPaymentsCount = carOwnerPaymentsAgg._count           || 0;
-    const totalDelayPenalty    = totalDelayPenaltyAgg._sum.totalDelayPenalty || 0;
+    const totalContractValue = totalContractValueAgg._sum.totalRent || 0;
+    const pendingPayments = pendingPaymentsAgg._sum.remainingAmount || 0;
+    const totalReceived = totalReceivedAgg._sum.amount || 0;
+    const ownerIncome = ownerShareAllAgg._sum.ownerShare || 0;
+    const adminIncome = adminShareAllAgg._sum.adminShare || 0;
+    const ownerIncomeCompleted = ownerShareCompletedAgg._sum.ownerShare || 0;
+    const adminIncomeCompleted = adminShareCompletedAgg._sum.adminShare || 0;
+    const totalExpenses = expenseSplitsAgg._sum.amount || 0;
+    const adminExpenses = expenseSplitsAgg._sum.adminShare || 0;
+    const ownerExpenses = expenseSplitsAgg._sum.ownerShare || 0;
+    const totalSalaryPaid = salaryPaymentsAgg._sum.amount || 0;
+    const totalSalaryCount = salaryPaymentsAgg._count || 0;
+    const totalCarOwnerPaid = carOwnerPaymentsAgg._sum.amount || 0;
+    const totalCarOwnerPaymentsCount = carOwnerPaymentsAgg._count || 0;
+    const totalDelayPenalty = totalDelayPenaltyAgg._sum.totalDelayPenalty || 0;
 
     // Enrich pending contracts with live overdue data
-    const { enrichWithOverdue } = await import('../utils/overdueUtils.js');
+    const { enrichWithOverdue } = await import("../utils/overdueUtils.js");
     const enrichedPending = pendingContractsList.map(enrichWithOverdue);
 
-    const adminNetIncome       = adminIncome - adminExpenses - totalSalaryPaid;
-    const ownerNetIncome       = ownerIncome - ownerExpenses;
-    const ownerOutstanding     = ownerNetIncome - totalCarOwnerPaid;
+    const adminNetIncome = adminIncome - adminExpenses - totalSalaryPaid;
+    const ownerNetIncome = ownerIncome - ownerExpenses;
+    const ownerOutstanding = ownerNetIncome - totalCarOwnerPaid;
 
     // Monthly income chart — last 6 months, sorted ascending
     const monthlyIncome = {};
-    paymentsForMonthly.forEach(p => {
-      const key = `${p.paymentDate.getFullYear()}-${String(p.paymentDate.getMonth() + 1).padStart(2, '0')}`;
+    paymentsForMonthly.forEach((p) => {
+      const parts = getKabulDateTimeParts(new Date(p.paymentDate));
+      const key = `${parts.year}-${String(parts.month).padStart(2, "0")}`;
       monthlyIncome[key] = (monthlyIncome[key] || 0) + p.amount;
     });
     const monthlyIncomeSorted = Object.fromEntries(
-      Object.entries(monthlyIncome).sort(([a], [b]) => a.localeCompare(b))
+      Object.entries(monthlyIncome).sort(([a], [b]) => a.localeCompare(b)),
     );
 
     sendSuccess(res, {
       // Fleet
-      totalCars, availableCars, rentedCars, maintenanceCars,
+      totalCars,
+      availableCars,
+      rentedCars,
+      maintenanceCars,
       // Customers & contracts
       totalCustomers,
-      activeContracts, completedContracts, overdueContracts,
+      activeContracts,
+      completedContracts,
+      overdueContracts,
       totalContractsCount,
       // Financials
       totalContractValue,
       totalReceived,
       pendingPayments,
-      ownerIncome,        adminIncome,
-      ownerIncomeCompleted, adminIncomeCompleted,
-      totalExpenses,      adminExpenses,        ownerExpenses,
-      totalSalaryPaid,    totalSalaryCount,
-      totalCarOwnerPaid,  totalCarOwnerPaymentsCount,
-      adminNetIncome,     ownerNetIncome,
+      ownerIncome,
+      adminIncome,
+      ownerIncomeCompleted,
+      adminIncomeCompleted,
+      totalExpenses,
+      adminExpenses,
+      ownerExpenses,
+      totalSalaryPaid,
+      totalSalaryCount,
+      totalCarOwnerPaid,
+      totalCarOwnerPaymentsCount,
+      adminNetIncome,
+      ownerNetIncome,
       ownerOutstanding,
       totalDelayPenalty,
       // Charts & lists
@@ -162,5 +209,7 @@ export const getDashboardStats = async (req, res) => {
       pendingContractsList: enrichedPending,
       recentPaymentsList,
     });
-  } catch (err) { sendError(res, err.message); }
+  } catch (err) {
+    sendError(res, err.message);
+  }
 };

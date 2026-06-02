@@ -3,6 +3,11 @@ import prisma from '../utils/prisma.js';
 import { sendSuccess, sendError } from '../utils/response.js';
 import { deleteUploadedFile } from '../utils/fileUtils.js';
 import { getFileUrl, cleanupFile } from '../utils/storage.js';
+import {
+  getKabulMonthRangeForDate,
+  parseKabulFilterRange,
+  parseKabulDateString,
+} from '../utils/dateUtils.js';
 
 const sanitize = (owner) => {
   if (!owner) return owner;
@@ -76,14 +81,12 @@ export const getCarOwnerById = async (req, res) => {
 
 export const getCarOwnerPaymentStats = async (req, res) => {
   try {
-    const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    const { start, end } = getKabulMonthRangeForDate();
 
     const [allTime, thisMonth] = await Promise.all([
       prisma.carOwnerPayment.aggregate({ _sum: { amount: true }, _count: true }),
       prisma.carOwnerPayment.aggregate({
-        where: { paymentDate: { gte: monthStart, lte: monthEnd } },
+        where: { paymentDate: { gte: start, lte: end } },
         _sum: { amount: true },
         _count: true,
       }),
@@ -120,13 +123,8 @@ export const getCarOwnerPayments = async (req, res) => {
       ];
     }
     if (dateFrom || dateTo) {
-      where.paymentDate = {};
-      if (dateFrom) where.paymentDate.gte = new Date(dateFrom);
-      if (dateTo) {
-        const end = new Date(dateTo);
-        end.setHours(23, 59, 59, 999);
-        where.paymentDate.lte = end;
-      }
+      const range = parseKabulFilterRange({ dateFrom, dateTo });
+      if (range.gte || range.lte) where.paymentDate = range;
     }
 
     const [payments, total] = await Promise.all([
@@ -197,7 +195,7 @@ export const createCarOwnerPayment = async (req, res) => {
           data: {
             ownerId,
             amount: parsedAmount,
-            paymentDate: new Date(paymentDate),
+            paymentDate: parseKabulDateString(paymentDate),
             paymentMethod: paymentMethod?.trim() || null,
             notes: notes?.trim() || null,
             receiptNumber,
@@ -242,7 +240,7 @@ export const updateCarOwnerPayment = async (req, res) => {
       where: { id: req.params.id },
       data: {
         amount: parsedAmount,
-        paymentDate: new Date(paymentDate),
+        paymentDate: parseKabulDateString(paymentDate),
         paymentMethod: paymentMethod?.trim() || null,
         notes: notes?.trim() || null,
       },

@@ -9,11 +9,11 @@ import { carOwnersAPI } from '@/lib/api';
 import { Plus, Search, Edit, Trash2, UserCheck, Camera, X, Car, Eye, EyeOff, KeyRound, Mail, Banknote, History, Printer, Download, FileText } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { resolveImgUrl } from '@/lib/imageUrl';
-import { formatAfghanDate, formatNumber, numericInputHandler } from '@/lib/utils';
+import { formatAfghanDate, formatKabulIso, formatNumber, numericInputHandler } from '@/lib/utils';
 import { OWNER_PAYMENT_METHODS, openCarOwnerPaymentReceipt } from '@/lib/carOwnerReceipt';
 
 const emptyForm = { fullName: '', fatherName: '', tazkiraNumber: '', phoneNumber: '', address: '', email: '', password: '' };
-const todayISO = () => new Date().toISOString().split('T')[0];
+const todayISO = () => formatKabulIso(new Date());
 const emptyPaymentForm = { amount: '', paymentDate: todayISO(), paymentMethod: 'cash', notes: '', receiptNumber: '' };
 
 export default function CarOwnersPage() {
