@@ -31,6 +31,54 @@ const afghanCalendarFormatter = new Intl.DateTimeFormat(
   },
 );
 
+const KABUL_TIMEZONE = "Asia/Kabul";
+
+const kabulDateFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: KABUL_TIMEZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+function getKabulGregorianDateParts(date: Date) {
+  const parts = kabulDateFormatter.formatToParts(date);
+  const result = { year: "", month: "", day: "" };
+  parts.forEach((part) => {
+    if (part.type === "year") result.year = part.value;
+    if (part.type === "month") result.month = part.value;
+    if (part.type === "day") result.day = part.value;
+  });
+  return result;
+}
+
+export function formatKabulIso(dateOrString: string | Date = new Date()) {
+  const date =
+    typeof dateOrString === "string" ? new Date(dateOrString) : dateOrString;
+  if (Number.isNaN(date.getTime())) return "";
+
+  const parts = getKabulGregorianDateParts(date);
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+export function getKabulMonthValue(dateOrString: string | Date = new Date()) {
+  return formatKabulIso(dateOrString).slice(0, 7);
+}
+
+export function getKabulMonthOptions(count = 12) {
+  const current = getKabulGregorianDateParts(new Date());
+  const currentYear = Number(current.year);
+  const currentMonth = Number(current.month);
+
+  return Array.from({ length: Math.max(0, count) }, (_, index) => {
+    const monthIndex = currentYear * 12 + currentMonth - 1 - index;
+    const year = Math.floor(monthIndex / 12);
+    const month = (monthIndex % 12) + 1;
+    const value = `${year}-${String(month).padStart(2, "0")}`;
+
+    return { value, label: value };
+  });
+}
+
 function getAfghanDatePartsFromDate(date: Date) {
   const parts = afghanCalendarFormatter.formatToParts(date);
   const result = { year: "", month: "", day: "" };
