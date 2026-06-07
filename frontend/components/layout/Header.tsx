@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useApp } from '@/lib/context';
 import { draftsAPI } from '@/lib/api';
+import MonthSelector from './MonthSelector';
 import { Menu, FileEdit } from 'lucide-react';
 
 export default function Header({ onMenuClick }: { onMenuClick: () => void }) {
@@ -52,6 +53,7 @@ export default function Header({ onMenuClick }: { onMenuClick: () => void }) {
         <h1 className="text-base font-bold text-amber-900 hidden lg:block tracking-wide">
           {t.appName}
         </h1>
+        <MonthSelector className="hidden lg:flex" />
       </div>
 
       <div className="flex items-center gap-2">

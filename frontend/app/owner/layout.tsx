@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
+import MonthSelector from '@/components/layout/MonthSelector';
 import {
   LayoutDashboard, Car, FileText, LogOut,
   Menu, X, ChevronLeft, Bell, Phone, UserCheck, Banknote,
@@ -321,6 +322,9 @@ export default function OwnerLayout({ children }: { children: React.ReactNode })
             <span className="text-amber-900 font-bold truncate">
               {navItems.find(n => n.href === pathname)?.[lang === 'dari' ? 'dari' : 'pashto'] || label('پنل', 'پینل')}
             </span>
+          </div>
+          <div className="hidden sm:flex items-center gap-2">
+            <MonthSelector />
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <Link href="/owner/notifications"

@@ -9,6 +9,7 @@ import { useApp } from "@/lib/context";
 import { employeesAPI } from "@/lib/api";
 import {
   formatAfghanDate,
+  formatKabulIso,
   formatNumber,
   numericInputHandler,
 } from "@/lib/utils";
@@ -93,14 +94,14 @@ const emptyEmpForm = {
 const emptyPayForm = {
   employeeId: "",
   amount: "",
-  paymentDate: new Date().toISOString().split("T")[0],
+  paymentDate: formatKabulIso(new Date()),
   paymentMethod: "cash",
   notes: "",
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const todayISO = () => new Date().toISOString().split("T")[0];
+const todayISO = () => formatKabulIso(new Date());
 
 const PAYMENT_METHODS: Record<string, string> = {
   cash: "نقدی",

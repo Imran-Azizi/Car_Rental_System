@@ -1,5 +1,10 @@
 import prisma from '../utils/prisma.js';
 import { sendSuccess, sendError } from '../utils/response.js';
+import {
+  getKabulMonthRangeForDate,
+  parseKabulFilterRange,
+  parseKabulDateString,
+} from '../utils/dateUtils.js';
 
 // ── Receipt number generator ──────────────────────────────────────────────────
 
@@ -160,15 +165,13 @@ export const deleteEmployee = async (req, res) => {
 
 export const getSalaryStats = async (req, res) => {
   try {
-    const now   = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    const { start, end } = getKabulMonthRangeForDate();
 
     const [employeeCount, allTime, thisMonth] = await Promise.all([
       prisma.employee.count(),
       prisma.salaryPayment.aggregate({ _sum: { amount: true }, _count: true }),
       prisma.salaryPayment.aggregate({
-        where: { paymentDate: { gte: monthStart, lte: monthEnd } },
+        where: { paymentDate: { gte: start, lte: end } },
         _sum:  { amount: true },
         _count: true,
       }),
@@ -203,7 +206,7 @@ export const createSalaryPayment = async (req, res) => {
       data: {
         employeeId,
         amount:       parsed,
-        paymentDate:  new Date(paymentDate),
+        paymentDate:  parseKabulDateString(paymentDate),
         paymentMethod: paymentMethod?.trim() || null,
         notes:        notes?.trim() || null,
         receiptNumber,
@@ -224,13 +227,8 @@ export const getSalaryPayments = async (req, res) => {
     const where = {};
     if (employeeId) where.employeeId = employeeId;
     if (dateFrom || dateTo) {
-      where.paymentDate = {};
-      if (dateFrom) where.paymentDate.gte = new Date(dateFrom);
-      if (dateTo) {
-        const end = new Date(dateTo);
-        end.setHours(23, 59, 59, 999);
-        where.paymentDate.lte = end;
-      }
+      const range = parseKabulFilterRange({ dateFrom, dateTo });
+      if (range.gte || range.lte) where.paymentDate = range;
     }
 
     const [payments, total] = await Promise.all([

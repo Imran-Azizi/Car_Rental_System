@@ -20,16 +20,34 @@
  * @param {string|null}  endTime  'HH:MM' format
  * @returns {Date}
  */
+import { getKabulDateTimeParts, toKabulUtcDate } from './dateUtils.js';
+
 export function buildDeadline(endDate, endTime) {
-  const d = new Date(endDate);
+  const dateValue = new Date(endDate);
+  const parts = getKabulDateTimeParts(dateValue);
 
   if (endTime && endTime.trim() && endTime.trim() !== '00:00') {
-    const [h, m] = endTime.split(':').map(Number);
-    d.setHours(h, m, 0, 0);
-  } else {
-    d.setHours(23, 59, 59, 999);
+    const [h = '0', m = '0'] = endTime.split(':');
+    return toKabulUtcDate({
+      year: parts.year,
+      month: parts.month,
+      day: parts.day,
+      hour: Number(h),
+      minute: Number(m),
+      second: 0,
+      millisecond: 0,
+    });
   }
-  return d;
+
+  return toKabulUtcDate({
+    year: parts.year,
+    month: parts.month,
+    day: parts.day,
+    hour: 23,
+    minute: 59,
+    second: 59,
+    millisecond: 999,
+  });
 }
 
 /**
